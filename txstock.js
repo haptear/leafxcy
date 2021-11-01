@@ -7,9 +7,12 @@
 
 内置了多账户相互做分享任务，账户数多于一个才能用
 测试了做分享任务的情况下，一天收益大概在14000金币
-默认自动提现5元和做分享任务
+默认自动提现5元，做分享任务，做新手任务
+新手任务可能需要跑几次才能做完，不过每天跑的话总会做完的
+
 不想提现的话自己新建一个TxStockCash环境变量，0代表不提现，1代表提现1元，5代表提现5元
-不想做分享任务的话，新建一个TxStockHelp环境变量，0代表不做分享互助
+不想做分享任务的话，新建一个TxStockHelp环境变量，0代表不做分享互助，1代表做分享互助
+不想做新手任务的话，新建一个TxStockNewbie环境变量，0代表不做新手任务，1代表做新手任务
 
 
 青龙：
@@ -49,6 +52,7 @@ let rndtime = "" //毫秒
 let signday = formatDateTime(new Date());
 var cash = ($.isNode() ? (process.env.TxStockCash) : ($.getval('TxStockCash'))) || 5; //0为不自动提现,1为自动提现1元,5为自动提现5元
 var help = ($.isNode() ? (process.env.TxStockHelp) : ($.getval('TxStockHelp'))) || 1; //0为不做分享助力任务，1为多账户互相分享助力
+var newbie = ($.isNode() ? (process.env.TxStockHelp) : ($.getval('TxStockNewbie'))) || 1; //0为不做新手任务，1为自动做新手任务
 
 const appUrlArr = [];
 let appUrlArrVal = "";
@@ -64,41 +68,62 @@ let coinStart = []
 let coinEnd = []
 let coinInfo = ""
 
-let i = 0
-let j = 0
-let k = 0
 let numUser = 0
+let totalUser = 0
+let shareFlag = 0
 let helpUser = 0
 let NOT_PRINT = 0
 let PRINT = 1
 let scanList = []
 let nickname = []
-let ticket = ""
-let wxticket = ""
+let bullStatusFlag = []
 
-let bullInviteCode = ""
-let bullInviteCodeArr = []
+let appShareFlag = 1
+let wxShareFlag = 0
+let appTaskFlag = 1
+let wxTaskFlag = 0
+let bullishFlag = 1
 
-let bullHelpCode = ""
-let bullHelpCodeArr = []
+let userAppShareTaskList = {
+    "daily": ["news_share", "task_66_1110", "task_50_1110", "task_51_1110", "task_50_1111", "task_51_1111", "task_51_1112", "task_51_1113"],
+    "newbie": ["task_50_1032", "task_51_1032"],
+    
+}
+let userAppShareCodeArr = {
+    "daily": {},
+    "newbie": {},
+    "bull_invite": [],
+    "bull_help": [],
+}
 
-let userAppShareTaskList = ["task_50_1110", "task_51_1110", "task_50_1111", "task_51_1111", "task_51_1112", "task_51_1113"]
-let userAppShareCodeArr = {}
-//let userWxShareTaskList = ["task_50_1110", "task_51_1110", "task_50_1111", "task_51_1111", "task_51_1112", "task_51_1113"]
-let userWxShareTaskList = []
-let userWxShareCodeArr = {}
+let userWxShareTaskList = {
+    "daily": ["news_share", "task_66_1110", "task_50_1110", "task_51_1110", "task_50_1111", "task_51_1111", "task_51_1112", "task_51_1113"],
+    "newbie": ["task_50_1032", "task_51_1032"],
+}
+let userWxShareCodeArr = {
+    "daily": {},
+    "newbie": {},
+}
 
 //APP任务
-let appDailyArray = [1100, 1101, 1103, 1104, 1105, 1109, 1110, 1111, 1112, 1113];
-let appNewbieArray = [1030];
-let appBullArray = [1105];
-let appTaskArray = [];
+let appActidArray = {
+    "daily": [1100, 1101, 1103, 1104, 1105, 1109, 1110, 1111, 1112, 1113],
+    "newbie": [1030, 1032],
+}
+let appTaskArray = {
+    "daily": [],
+    "newbie": [],
+}
 
 //微信小程序任务
-let wxDailyArray = [1100, 1101, 1103, 1104, 1105, 1109, 1110, 1111, 1112, 1113];
-let wxNewbieArray = [1031];
-let wxBullArray = [1106];
-let wxTaskArray = [];
+let wxActidArray = {
+    "daily": [1100, 1101, 1103, 1104, 1105, 1109, 1110, 1111, 1112, 1113],
+    "newbie": [1030, 1032],
+}
+let wxTaskArray = {
+    "daily": [],
+    "newbie": [],
+}
 
 //APP长牛任务
 let bullTaskArray = { 
@@ -120,99 +145,26 @@ var TxStockWxHeader
 
     if(typeof $request !== "undefined")
     {
-        if($request.url.indexOf("activity_task_daily.fcgi?") > -1) {
-            if($request.url.indexOf("openid=") > -1)
-            {
-                //APP包
-                $.setdata($request.url,'TxStockAppUrl')
-                $.log(`获取TxStockAppUrl成功: ${$request.url}\n`)
-                $.setdata(JSON.stringify($request.headers),'TxStockAppHeader')
-                $.log(`获取TxStockAppHeader成功: ${JSON.stringify($request.headers)}\n`)
-            }
-            else
-            {
-                //微信包
-                $.setdata(JSON.stringify($request.headers),'TxStockWxHeader')
-                $.log(`获取TxStockWxHeader成功: ${JSON.stringify($request.headers)}\n`)
-            }
-        }
+        await getRewrite()
     }
     else
     {
-        if($.isNode())
-        {
-            TxStockAppUrl = process.env.TxStockAppUrl
-            TxStockAppHeader = process.env.TxStockAppHeader
-            TxStockWxHeader = process.env.TxStockWxHeader
-        }
-        else
-        {
-            TxStockAppUrl = $.getdata('TxStockAppUrl')
-            TxStockAppHeader = $.getdata('TxStockAppHeader')
-            TxStockWxHeader = $.getdata('TxStockWxHeader')
+        //检查环境变量
+        if(!(await checkEnv())){
+            return
         }
         
-        
-        
-        if(TxStockAppUrl && TxStockAppHeader)
-        {
-            if (TxStockAppUrl.indexOf('#') > -1) {
-                appUrlArrs = TxStockAppUrl.split('#');
-                console.log(`您选择的是用"#"隔开TxStockAppUrl\n`)
-            } else {
-                appUrlArrs = [TxStockAppUrl]
-            };
-            Object.keys(appUrlArrs).forEach((item) => {
-                if (appUrlArrs[item]) {
-                    appUrlArr.push(appUrlArrs[item])
-                }
-            })
-            
-            if (TxStockAppHeader.indexOf('#') > -1) {
-                appHeaderArrs = TxStockAppHeader.split('#');
-                console.log(`您选择的是用"#"隔开TxStockAppHeader\n`)
-            } else {
-                appHeaderArrs = [TxStockAppHeader]
-            };
-            Object.keys(appHeaderArrs).forEach((item) => {
-                if (appHeaderArrs[item]) {
-                    appHeaderArr.push(appHeaderArrs[item])
-                }
-            })
-        }
-        else
-        {
-            $.log("未找到环境变量 TxStockAppUrl或TxStockAppHeader。无法做APP任务，签到和提现\n")
-        }
-        
-        if(TxStockWxHeader)
-        {
-            if (TxStockWxHeader.indexOf('#') > -1) {
-                wxHeaderArrs = TxStockWxHeader.split('#');
-                console.log(`您选择的是用"#"隔开TxStockWxHeader\n`)
-            } else {
-                wxHeaderArrs = [TxStockWxHeader]
-            };
-            Object.keys(wxHeaderArrs).forEach((item) => {
-                if (wxHeaderArrs[item]) {
-                    wxHeaderArr.push(wxHeaderArrs[item])
-                }
-            })
-        }
-        else
-        {
-            $.log("未找到环境变量 TxStockWxHeader，无法做微信小程序任务\n")
-        }
-        
+        //初始化任务列表
         await initTaskList()
         
-        let totalUser = appUrlArr.length
-        let shareFlag = 0
+        //获取账户信息
+        await initAccountInfo()
         
-        if(help && TxStockAppUrl && TxStockAppHeader && TxStockWxHeader && totalUser > 1)
-        {
-            shareFlag = 1
-        }
+        //新手任务
+        await newbieTask()
+        
+        //获取互助码和相互助力
+        await shareTask()
         
         for (numUser = 0; numUser < totalUser; numUser++)
         {
@@ -226,193 +178,345 @@ var TxStockWxHeader
             //await scanAppTaskList(1000,1400,"task_daily","routine",NOT_PRINT)
             //await scanWxTaskList(1000,1400,"task_daily","routine",NOT_PRINT) //每个大概花费86ms
             
-            if(TxStockAppUrl && TxStockAppHeader)
-            {
-                await userhome(); //金币查询
-                coinStart.push(coinInfo)
-                await orderQuery(1)
-                await signStatus()
-
-                for(j=0; j<appTaskArray.length; j++)
-                {
-                    await appTaskList(appTaskArray[j]);
-                }
-            }
-
-            if(TxStockWxHeader)
-            {
-                for(j=0; j<wxTaskArray.length; j++)
-                {
-                    await wxTaskList(wxTaskArray[j]);
-                }
-            }
+            await signStatus(); //签到
+            await $.wait(1000)
             
-            await bullTask(bullTaskArray["rock_bullish"])
-            for(i=0; i<10; i++){
-                await bullTask(bullTaskArray["open_box"])
-                await $.wait(5000)
-            }
-            await bullTask(bullTaskArray["open_blindbox"])
-            await bullTask(bullTaskArray["query_blindbox"])
+            await appGuessRiseFall(1); //猜涨跌
+            await $.wait(1000)
             
-            await bullStatus()
+            await dailyTask() //日常任务
+            await $.wait(1000)
             
-            if(shareFlag)
-            {
-                for (j=0; j<userAppShareTaskList.length; j++)
-                {
-                    await appShareTaskReq(userAppShareTaskList[j])
-                }
-                for (j=0; j<userWxShareTaskList.length; j++)
-                {
-                    await wxShareTaskReq(userWxShareTaskList[j])
-                }
-            }
+            await bullTask() //长牛任务
+            await $.wait(1000)
+            
+            await todayIncome()//收益查询，提现
+            await $.wait(1000)
             
             $.log(`\n======= 结束腾讯自选股账号 ${numUser+1} 任务 =======\n`)
-        }
-        
-        //互助
-        if(shareFlag)
-        {
-            $.log(`\n开始做互助任务：\n`)
-            for (numUser = 0; numUser < totalUser; numUser++)
-            {
-                await getEnvParam(numUser)
-                
-                $.log(`\n======= 账户${nickname[numUser]} 开始帮助其他账户=======\n`)
-                for (helpUser = 0; helpUser < totalUser; helpUser++){
-                    if(helpUser != numUser) {
-                        await bullInvite(bullInviteCodeArr[helpUser],bullHelpCodeArr[helpUser])
-                        
-                        for (j=0; j<userAppShareTaskList.length; j++)
-                        {
-                            shareTaskName = userAppShareTaskList[j]
-                            if(userAppShareCodeArr[shareTaskName]) {
-                                await wxShareTaskDone(shareTaskName,userAppShareCodeArr[shareTaskName][helpUser])
-                            }
-                        }
-                        
-                        for (j=0; j<userWxShareTaskList.length; j++)
-                        {
-                            shareTaskName = userWxShareTaskList[j]
-                            if(userWxShareCodeArr[shareTaskName]) {
-                                await wxShareTaskDone(shareTaskName,userWxShareCodeArr[shareTaskName][helpUser])
-                            }
-                        }
-                    }
-                }
-                $.log(`\n======= 账户${nickname[numUser]} 结束助力=======\n`)
-            }
-            $.log(`\n结束互助任务\n`)
-            await $.wait(5000)
-        }
-        
-        //收益查询，提现
-        if(TxStockAppUrl && TxStockAppHeader)
-        {
-            for (numUser = 0; numUser < totalUser; numUser++)
-            {
-                await getEnvParam(numUser)
-                
-                await userhome(); //第二次金币查询
-                coinEnd.push(coinInfo)
-                
-                if(coinEnd[numUser] && coinStart[numUser])
-                {
-                    rewardCoin = coinEnd[numUser] - coinStart[numUser];
-                    $.log(`\n账号：${nickname[numUser]}，本次运行获得${rewardCoin}金币\n`)
-                }
-                
-                await orderQuery(0)
-            }
         }
     }
   
 
 })()
 .catch((e) => $.logErr(e))
-  .finally(() => $.done())
+.finally(() => $.done())
   
-function getEnvParam(userNum)
+async function getRewrite()
 {
-    if(TxStockAppUrl && TxStockAppHeader)
-    {
-        appUrlArrVal = appUrlArr[userNum];
-        appHeaderArrVal = JSON.parse(appHeaderArr[userNum]);
-        
-        app_openid = appUrlArrVal.match(/&openid=([\w-]+)/)[1]
-        app_fskey = appUrlArrVal.match(/&fskey=([\w-]+)/)[1]
-        app_token = appUrlArrVal.match(/&access_token=([\w-]+)/)[1]
-        app_appName = appUrlArrVal.match(/&_appName=([\w\.,-]+)/)[1]
-        app_appver = appUrlArrVal.match(/&_appver=([\w\.,-]+)/)[1]
-        app_osVer = appUrlArrVal.match(/&_osVer=([\w\.,-]+)/)[1]
-        app_devId = appUrlArrVal.match(/&_devId=([\w-]+)/)[1]
-        
-        app_ck = appHeaderArrVal["Cookie"]
-        app_UA = appHeaderArrVal["User-Agent"]
-    }
-    
-    if(TxStockWxHeader)
-    {
-        wxHeaderArrVal = JSON.parse(wxHeaderArr[userNum]);
-        
-        wx_ck = wxHeaderArrVal["Cookie"]
-        wx_UA = wxHeaderArrVal["User-Agent"]
+    if($request.url.indexOf("activity_task_daily.fcgi?") > -1) {
+        if($request.url.indexOf("openid=") > -1)
+        {
+            //APP包
+            $.setdata($request.url,'TxStockAppUrl')
+            $.log(`获取TxStockAppUrl成功: ${$request.url}\n`)
+            $.setdata(JSON.stringify($request.headers),'TxStockAppHeader')
+            $.log(`获取TxStockAppHeader成功: ${JSON.stringify($request.headers)}\n`)
+        }
+        else
+        {
+            //微信包
+            $.setdata(JSON.stringify($request.headers),'TxStockWxHeader')
+            $.log(`获取TxStockWxHeader成功: ${JSON.stringify($request.headers)}\n`)
+        }
     }
 }
 
-function initTaskList() {
+async function checkEnv()
+{
+    if($.isNode())
+    {
+        TxStockAppUrl = process.env.TxStockAppUrl
+        TxStockAppHeader = process.env.TxStockAppHeader
+        TxStockWxHeader = process.env.TxStockWxHeader
+    }
+    else
+    {
+        TxStockAppUrl = $.getdata('TxStockAppUrl')
+        TxStockAppHeader = $.getdata('TxStockAppHeader')
+        TxStockWxHeader = $.getdata('TxStockWxHeader')
+    }
+    
+    if(!TxStockAppUrl || !TxStockAppHeader || !TxStockWxHeader)
+    {
+        str1 = TxStockAppUrl ? "" : "TxStockAppUrl"
+        str2 = TxStockAppHeader ? "" : "TxStockAppHeader"
+        str3 = TxStockWxHeader ? "" : "TxStockWxHeader"
+        $.log("未找到环境变量: ${str1} ${str2} ${str3}\n")
+        return false
+    }
+    
+    if (TxStockAppUrl.indexOf('#') > -1) {
+        appUrlArrs = TxStockAppUrl.split('#');
+        console.log(`您选择的是用"#"隔开TxStockAppUrl\n`)
+    } else {
+        appUrlArrs = [TxStockAppUrl]
+    };
+    Object.keys(appUrlArrs).forEach((item) => {
+        if (appUrlArrs[item]) {
+            appUrlArr.push(appUrlArrs[item])
+        }
+    })
+    
+    if (TxStockAppHeader.indexOf('#') > -1) {
+        appHeaderArrs = TxStockAppHeader.split('#');
+        console.log(`您选择的是用"#"隔开TxStockAppHeader\n`)
+    } else {
+        appHeaderArrs = [TxStockAppHeader]
+    };
+    Object.keys(appHeaderArrs).forEach((item) => {
+        if (appHeaderArrs[item]) {
+            appHeaderArr.push(appHeaderArrs[item])
+        }
+    })
+
+    if (TxStockWxHeader.indexOf('#') > -1) {
+        wxHeaderArrs = TxStockWxHeader.split('#');
+        console.log(`您选择的是用"#"隔开TxStockWxHeader\n`)
+    } else {
+        wxHeaderArrs = [TxStockWxHeader]
+    };
+    Object.keys(wxHeaderArrs).forEach((item) => {
+        if (wxHeaderArrs[item]) {
+            wxHeaderArr.push(wxHeaderArrs[item])
+        }
+    })
+    
+    totalUser = appUrlArr.length
+    shareFlag = (help && totalUser > 1)
+    
+    return true
+}
+
+async function getEnvParam(userNum)
+{
+    appUrlArrVal = appUrlArr[userNum];
+    appHeaderArrVal = JSON.parse(appHeaderArr[userNum]);
+    
+    app_openid = appUrlArrVal.match(/&openid=([\w-]+)/)[1]
+    app_fskey = appUrlArrVal.match(/&fskey=([\w-]+)/)[1]
+    app_token = appUrlArrVal.match(/&access_token=([\w-]+)/)[1]
+    app_appName = appUrlArrVal.match(/&_appName=([\w\.,-]+)/)[1]
+    app_appver = appUrlArrVal.match(/&_appver=([\w\.,-]+)/)[1]
+    app_osVer = appUrlArrVal.match(/&_osVer=([\w\.,-]+)/)[1]
+    app_devId = appUrlArrVal.match(/&_devId=([\w-]+)/)[1]
+    
+    app_ck = appHeaderArrVal["Cookie"]
+    app_UA = appHeaderArrVal["User-Agent"]
+    wxHeaderArrVal = JSON.parse(wxHeaderArr[userNum]);
+    
+    wx_ck = wxHeaderArrVal["Cookie"]
+    wx_UA = wxHeaderArrVal["User-Agent"]
+}
+
+async function initAccountInfo()
+{
+    for (numUser = 0; numUser < totalUser; numUser++)
+    {
+        await getEnvParam(numUser)
+        
+        await userhome(); //金币查询
+        coinStart.push(coinInfo)
+        await $.wait(500)
+        await orderQuery(1); //获取用户名
+        await $.wait(500)
+        await bullStatus(1) //检查长牛是否黑号
+        await $.wait(500)
+    }
+}
+
+async function initTaskList() 
+{
     $.log(`开始初始化任务列表\n`)
     let taskItem = {}
     
-    //默认不做新手任务
-    /*
-    for(i=0; i<appNewbieArray.length; i++){
-        taskItem = {"taskName":"APP新手任务","activity":"task_continue","type":"app_new_user","actid":appNewbieArray[i]}
-        appTaskArray.push(taskItem)
-    }
-    */
-    
-    //todo: 长牛任务
-    /*
-    for(i=0; i<appBullArray.length; i++){
-        taskItem = {"taskName":"APP长牛任务","activity":"year_party","type":"bullish","actid":appBullArray[i]}
-        appTaskArray.push(taskItem)
-    }
-    */
-    
-    for(i=0; i<appDailyArray.length; i++){
-        taskItem = {"taskName":"APP日常任务","activity":"task_daily","type":"routine","actid":appDailyArray[i]}
-        appTaskArray.push(taskItem)
+    for(let i=0; i<appActidArray["newbie"].length; i++){
+        taskItem = {"taskName":"APP新手任务","activity":"task_continue","type":"app_new_user","actid":appActidArray["newbie"][i]}
+        appTaskArray["newbie"].push(taskItem)
     }
     
-    //默认不做新手任务
-    /*
-    for(i=0; i<wxNewbieArray.length; i++){
-        taskItem = {"taskName":"微信新手任务","activity":"task_continue","type":"wzq_welfare_growth","actid":wxNewbieArray[i]}
-        wxTaskArray.push(taskItem)
+    for(let i=0; i<appActidArray["daily"].length; i++){
+        taskItem = {"taskName":"APP日常任务","activity":"task_daily","type":"routine","actid":appActidArray["daily"][i]}
+        appTaskArray["daily"].push(taskItem)
     }
-    */
     
-    //todo: 长牛任务
-    /*
-    for(i=0; i<wxBullArray.length; i++){
-        taskItem = {"taskName":"微信长牛任务","activity":"year_party","type":"bullish","actid":wxBullArray[i]}
-        wxTaskArray.push(taskItem)
+    for(let i=0; i<wxActidArray["newbie"].length; i++){
+        taskItem = {"taskName":"微信新手任务","activity":"task_continue","type":"wzq_welfare_growth","actid":wxActidArray["newbie"][i]}
+        wxTaskArray["newbie"].push(taskItem)
     }
-    */
     
-    for(i=0; i<wxDailyArray.length; i++){
-        taskItem = {"taskName":"微信日常任务","activity":"task_daily","type":"routine","actid":wxDailyArray[i]}
-        wxTaskArray.push(taskItem)
+    for(let i=0; i<wxActidArray["daily"].length; i++){
+        taskItem = {"taskName":"微信日常任务","activity":"task_daily","type":"routine","actid":wxActidArray["daily"][i]}
+        wxTaskArray["daily"].push(taskItem)
     }
+}
+
+async function bullTask() 
+{
+    if(bullishFlag && bullStatusFlag[numUser]) {
+        await bullTaskDone(bullTaskArray["rock_bullish"])
+        for(let i=0; i<10; i++){
+            await bullTaskDone(bullTaskArray["open_box"])
+            await $.wait(5000)
+        }
+        await bullTaskDone(bullTaskArray["open_blindbox"])
+        await bullTaskDone(bullTaskArray["query_blindbox"])
+        
+        await bullStatus(0)
+    }
+}
+
+async function dailyTask() 
+{
+    if(appTaskFlag) {
+        for(let i=0; i<appTaskArray["daily"].length; i++)
+        {
+            await appTaskList(appTaskArray["daily"][i]);
+        }
+    }
+    
+    if(wxTaskFlag) {
+        for(let i=0; i<wxTaskArray["daily"].length; i++)
+        {
+            await wxTaskList(wxTaskArray["daily"][i]);
+        }
+    }
+}
+
+async function newbieTask() 
+{
+    if(newbie) {
+        $.log(`\开始做新手任务：\n`)
+        for (numUser = 0; numUser < totalUser; numUser++)
+        {
+            await getEnvParam(numUser)
+            
+            for(let j=0; j<userAppShareTaskList["newbie"].length; j++)
+            {
+                await appShareTaskReq(userAppShareTaskList["newbie"][j],"newbie")
+            }
+            
+            /*for(let j=0; j<userWxShareTaskList["newbie"].length; j++)
+            {
+                await wxShareTaskReq(userWxShareTaskList["newbie"][j],"newbie")
+            }*/
+        }
+        
+        for (numUser = 0; numUser < totalUser; numUser++)
+        {
+            await getEnvParam(numUser)
+            
+            for(let j=0; j<userAppShareTaskList["newbie"].length; j++)
+            {
+                shareTaskName = userAppShareTaskList["newbie"][j]
+                if(userAppShareCodeArr["newbie"][shareTaskName]) {
+                    await wxShareTaskDone(shareTaskName,userAppShareCodeArr["newbie"][shareTaskName][helpUser])
+                }
+            }
+            
+            /*for(let j=0; j<userWxShareTaskList["newbie"].length; j++)
+            {
+                shareTaskName = userWxShareTaskList["newbie"][j]
+                if(userWxShareCodeArr["newbie"][shareTaskName]) {
+                    await wxShareTaskDone(shareTaskName,userWxShareCodeArr["newbie"][shareTaskName][helpUser])
+                }
+            }*/
+        }
+        
+        for (numUser = 0; numUser < totalUser; numUser++)
+        {
+            await getEnvParam(numUser)
+            
+            for(let i=0; i<appTaskArray["newbie"].length; i++)
+            {
+                await appTaskList(appTaskArray["newbie"][i]);
+            }
+        }
+    }
+}
+
+async function shareTask() 
+{
+    if(shareFlag) {
+        $.log(`\n开始获取互助码：\n`)
+        for (numUser = 0; numUser < totalUser; numUser++)
+        {
+            await getEnvParam(numUser)
+            
+            if(appShareFlag) {
+                for(let j=0; j<userAppShareTaskList["daily"].length; j++)
+                {
+                    await appShareTaskReq(userAppShareTaskList["daily"][j],"daily")
+                }
+            }
+            
+            if(wxShareFlag) {
+                for(let j=0; j<userWxShareTaskList["daily"].length; j++)
+                {
+                    await wxShareTaskReq(userWxShareTaskList["daily"][j],"daily")
+                }
+            }
+        }
+        
+        $.log(`\n开始做互助任务：\n`)
+        for (numUser = 0; numUser < totalUser; numUser++)
+        {
+            await getEnvParam(numUser)
+            
+            $.log(`\n======= 账户${nickname[numUser]} 开始帮助其他账户=======\n`)
+            for (helpUser = 0; helpUser < totalUser; helpUser++){
+                if(helpUser != numUser) {
+                    
+                    if(userAppShareCodeArr["bull_invite"].length > 0 && userAppShareCodeArr["bull_help"].length > 0)
+                    {
+                        await bullInvite(userAppShareCodeArr["bull_invite"][helpUser],userAppShareCodeArr["bull_help"][helpUser])
+                    }
+                    
+                    if(appShareFlag) {
+                        for(let j=0; j<userAppShareTaskList["daily"].length; j++)
+                        {
+                            shareTaskName = userAppShareTaskList["daily"][j]
+                            if(userAppShareCodeArr["daily"][shareTaskName]) {
+                                await wxShareTaskDone(shareTaskName,userAppShareCodeArr["daily"][shareTaskName][helpUser])
+                            }
+                        }
+                    }
+                    
+                    if(wxShareFlag) {
+                        for(let j=0; j<userWxShareTaskList["daily"].length; j++)
+                        {
+                            shareTaskName = userWxShareTaskList["daily"][j]
+                            if(userWxShareCodeArr["daily"][shareTaskName]) {
+                                await wxShareTaskDone(shareTaskName,userWxShareCodeArr["daily"][shareTaskName][helpUser])
+                            }
+                        }
+                    }
+                }
+            }
+            $.log(`\n======= 账户${nickname[numUser]} 结束助力=======\n`)
+        }
+        $.log(`\n结束互助任务\n`)
+    }
+}
+
+async function todayIncome()
+{
+    await userhome(); //第二次金币查询
+    coinEnd.push(coinInfo)
+    
+    if(coinEnd[numUser] && coinStart[numUser])
+    {
+        rewardCoin = coinEnd[numUser] - coinStart[numUser];
+        $.log(`\n账号：${nickname[numUser]}，本次运行获得${rewardCoin}金币\n`)
+    }
+    
+    await orderQuery(0)
 }
 
 //扫描可查询的APP任务列表
 async function scanAppTaskList(actidStart,actidEnd,activity,type,debugPrint) {
     console.log(`开始查询APP任务列表, activity=${activity}, type=${type}, from ${actidStart} to ${actidEnd}`)
-    for(i=actidStart; i<actidEnd; i++){
+    for(let i=actidStart; i<actidEnd; i++){
         titem = {"taskName":`扫描任务${i}`,"activity":activity,"type":type,"actid":i}
         await appTaskListQuery(titem,debugPrint);
         await $.wait(100)
@@ -424,7 +528,7 @@ async function scanAppTaskList(actidStart,actidEnd,activity,type,debugPrint) {
 //扫描可查询的微信任务列表
 async function scanWxTaskList(actidStart,actidEnd,activity,type,debugPrint) {
     console.log(`开始查询微信任务列表, activity=${activity}, type=${type}, from ${actidStart} to ${actidEnd}`)
-    for(i=actidStart; i<actidEnd; i++){
+    for(let i=actidStart; i<actidEnd; i++){
         titem = {"taskName":`扫描任务${i}`,"activity":activity,"type":type,"actid":i}
         await wxTaskListQuery(titem,debugPrint);
         await $.wait(20)
@@ -462,22 +566,26 @@ async function signStatus() {
                         data = JSON.parse(data);
                         //console.log(data);
                         if (data.retcode == 0) {
-                            $.log(`已连续签到${data.task_pkg.continue_sign_days}天，总签到天数${data.task_pkg.total_sign_days}天\n`);
-                            for(i=0; i<data.task_pkg.tasks.length; i++){
-                                resultItem = data.task_pkg.tasks[i]
-                                if(resultItem.date == signday){
-                                    if(resultItem.status == 0){
-                                        //今天未签到，去签到
-                                        await $.wait(200);
-                                        await signtask();
-                                    } else {
-                                        //今天已签到
-                                        $.log(`签到:今天已签到\n`);
+                            if(!data.forbidden_code) {
+                                $.log(`用户${nickname[numUser]}已连续签到${data.task_pkg.continue_sign_days}天，总签到天数${data.task_pkg.total_sign_days}天\n`);
+                                for(let i=0; i<data.task_pkg.tasks.length; i++){
+                                    resultItem = data.task_pkg.tasks[i]
+                                    if(resultItem.date == signday){
+                                        if(resultItem.status == 0){
+                                            //今天未签到，去签到
+                                            await $.wait(200);
+                                            await signtask();
+                                        } else {
+                                            //今天已签到
+                                            $.log(`用户${nickname[numUser]}今天已签到\n`);
+                                        }
                                     }
                                 }
+                            } else {
+                                console.log(`用户${nickname[numUser]}查询签到信息失败，可能已黑号：${data.forbidden_reason}\n`)
                             }
                         } else {
-                            console.log(`任务完成失败，错误信息：${JSON.stringify(data)}`)
+                            console.log(`用户${nickname[numUser]}查询签到信息失败：${data.retmsg}`)
                         }
                     }
                 }
@@ -521,7 +629,7 @@ async function signtask() {
                             $.log(`签到时间:${time(rndtime)}\n`);
                             await $.wait(5000); //等待5秒
                         } else {
-                            console.log(`任务完成失败，错误信息：${JSON.stringify(data)}`)
+                            $.log(`签到失败：${data.retmsg}`)
                         }
                     }
                 }
@@ -562,23 +670,36 @@ async function appTaskList(taskItem) {
                         data = JSON.parse(data);
                         //console.log(data)
                         if (data.retcode == 0) {
-                            if(data.task_pkg != null && data.task_pkg.length > 0){
-                                for(i=0; i<data.task_pkg[0].tasks.length; i++){
-                                    resultItem = data.task_pkg[0].tasks[i]
-                                    //console.log(resultItem)
-                                    task_id = resultItem.id
-                                    task_tid = resultItem.tid
-                                    if(resultItem.status == 0) {
-                                        await appTaskticket(taskItem); //申请票据
-                                        await appTaskDone(taskItem,ticket,task_id,task_tid);
-                                    } else {
-                                        $.log(`${taskItem.taskName}[actid:${taskItem.actid},id:${task_id},tid:${task_tid}]已完成\n`);
-                                        await $.wait(100);
+                            if(data.task_pkg != null){
+                                let numPkg = data.task_pkg.length
+                                for(let i=0; i<numPkg; i++){
+                                    //console.log(data.task_pkg[i])
+                                    if(data.task_pkg[i].lotto_ticket) {
+                                        //可领取新手奖励
+                                        await appNewbieAward(taskItem.actid,data.task_pkg[i].lotto_ticket)
+                                        continue
+                                    }
+                                    if(data.task_pkg[i].reward_type > 0) {
+                                        //已领取过新手奖励
+                                        continue
+                                    }
+                                    let numTask = data.task_pkg[i].tasks.length
+                                    for(let j=0; j<numTask; j++){
+                                        resultItem = data.task_pkg[i].tasks[j]
+                                        //console.log(resultItem)
+                                        task_id = resultItem.id
+                                        task_tid = resultItem.tid
+                                        if(resultItem.status == 0){
+                                            await appTaskticket(taskItem,task_id,task_tid);
+                                        } else {
+                                            $.log(`${taskItem.taskName}[actid:${taskItem.actid},id:${task_id},tid:${task_tid}]已完成\n`);
+                                            await $.wait(100);
+                                        }
                                     }
                                 }
                             }
                         } else {
-                            console.log(`${taskItem.taskName}查询失败，错误信息：${JSON.stringify(data)}`)
+                            console.log(`${taskItem.taskName}查询失败：${data.retmsg}`)
                         }
                     }
                 }
@@ -591,8 +712,52 @@ async function appTaskList(taskItem) {
     });
 }
 
+//新手任务奖励
+function appNewbieAward(actid,ticket) {
+    return new Promise((resolve, reject) => {
+        let testurl = {
+            url: `https://wzq.tenpay.com/cgi-bin/activity_task.fcgi?action=award&channel=1&actid=${actid}&reward_ticket=${ticket}&openid=${app_openid}&fskey=${app_fskey}&channel=1&access_token=${app_token}&_appName=${app_appName}&_appver=${app_appver}&_osVer=${app_osVer}&_devId=${app_devId}`,
+            headers: {
+                'Cookie': app_ck,
+                'Accept': `*/*`,
+                'Connection': `keep-alive`,
+                'Referer': `http://zixuanguapp.finance.qq.com`,
+                'Accept-Encoding': `gzip,deflate`,
+                'Host': `wzq.tenpay.com`,
+                'User-Agent': app_UA,
+                'Accept-Language': `zh-Hans-CN;q=1, en-CN;q=0.9`
+            },
+        }
+        $.get(testurl, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("腾讯自选股: API查询请求失败 ‼️‼️");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let task = JSON.parse(data)
+                        //console.log(task)
+                        if(task.retcode == 0){
+                            $.log(`获得新手任务[actid:${actid}]阶段奖励: ${task.reward_desc}\n`);
+                            await $.wait(1000); //等待10秒
+                        } else {
+                            $.log(`新手任务[actid:${actid}]阶段未完成：${task.retmsg}\n`);
+                            await $.wait(100);
+                        }
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        })
+    })
+}
+
 //APP票据申请
-function appTaskticket(taskItem) {
+function appTaskticket(taskItem,task_id,task_tid) {
     rndtime = Math.round(new Date().getTime())
     return new Promise((resolve, reject) => {
         let testurl = {
@@ -616,8 +781,8 @@ function appTaskticket(taskItem) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        let test2 = JSON.parse(data)
-                        ticket = test2.task_ticket
+                        result = JSON.parse(data)
+                        await appTaskDone(taskItem,result.task_ticket,task_id,task_tid);
                     }
                 }
             } catch (e) {
@@ -661,7 +826,7 @@ async function appTaskListQuery(taskItem,printDebug=0) {
                                 if(printDebug) {
                                     //console.log(data)
                                     console.log(`===================== actid=${taskItem.actid} start ======================`)
-                                    for(i=0; i<data.task_pkg[0].tasks.length; i++){
+                                    for(let i=0; i<data.task_pkg[0].tasks.length; i++){
                                         resultItem = data.task_pkg[0].tasks[i]
                                         console.log(resultItem)
                                     }
@@ -669,7 +834,7 @@ async function appTaskListQuery(taskItem,printDebug=0) {
                                 }
                             }
                         } else {
-                            //console.log(`${taskItem.taskName}查询失败，错误信息：${JSON.stringify(data)}`)
+                            //console.log(`${taskItem.taskName}查询失败：${data.retmsg}`)
                         }
                     }
                 }
@@ -792,23 +957,26 @@ async function wxTaskList(taskItem) {
                         data = JSON.parse(data);
                         //console.log(data)
                         if (data.retcode == 0) {
-                            if(data.task_pkg != null && data.task_pkg.length > 0){
-                                for(i=0; i<data.task_pkg[0].tasks.length; i++){
-                                    resultItem = data.task_pkg[0].tasks[i]
-                                    //console.log(resultItem)
-                                    task_id = resultItem.id
-                                    task_tid = resultItem.tid
-                                    if(resultItem.status == 0){
-                                        await wxtaskticket(taskItem); //申请票据
-                                        await wxTaskDone(taskItem,wxticket,task_id,task_tid);
-                                    } else {
-                                        $.log(`${taskItem.taskName}[actid:${taskItem.actid},id:${task_id},tid:${task_tid}]已完成\n`);
-                                        await $.wait(100);
+                            if(data.task_pkg){
+                                let numPkg = data.task_pkg.length
+                                for(let i=0; i<numPkg; i++){
+                                    let numTask = data.task_pkg[i].tasks.length
+                                    for(let j=0; j<numTask; j++){
+                                        resultItem = data.task_pkg[i].tasks[j]
+                                        //console.log(resultItem)
+                                        task_id = resultItem.id
+                                        task_tid = resultItem.tid
+                                        if(resultItem.status == 0){
+                                            await wxtaskticket(taskItem,task_id,task_tid);
+                                        } else {
+                                            $.log(`${taskItem.taskName}[actid:${taskItem.actid},id:${task_id},tid:${task_tid}]已完成\n`);
+                                            await $.wait(100);
+                                        }
                                     }
                                 }
                             }
                         } else {
-                            console.log(`${taskItem.taskName}查询失败，错误信息：${JSON.stringify(data)}`)
+                            console.log(`${taskItem.taskName}查询失败：${data.retmsg}`)
                         }
                     }
                 }
@@ -822,7 +990,7 @@ async function wxTaskList(taskItem) {
 }
 
 //WX票据申请
-function wxtaskticket(taskItem) {
+function wxtaskticket(taskItem,task_id,task_tid) {
     rndtime = Math.round(new Date().getTime())
     return new Promise((resolve) => {
         let url = {
@@ -849,8 +1017,8 @@ function wxtaskticket(taskItem) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        data = JSON.parse(data);
-                        wxticket = data.task_ticket
+                        result = JSON.parse(data);
+                        await wxTaskDone(taskItem,result.task_ticket,task_id,task_tid);
                     }
                 }
             } catch (e) {
@@ -894,7 +1062,7 @@ async function wxTaskListQuery(taskItem,printDebug=0) {
                                 if(printDebug) {
                                     //console.log(data)
                                     console.log(`===================== actid=${taskItem.actid} start ======================`)
-                                    for(i=0; i<data.task_pkg[0].tasks.length; i++){
+                                    for(let i=0; i<data.task_pkg[0].tasks.length; i++){
                                         resultItem = data.task_pkg[0].tasks[i]
                                         console.log(resultItem)
                                     }
@@ -902,7 +1070,7 @@ async function wxTaskListQuery(taskItem,printDebug=0) {
                                 }
                             }
                         } else {
-                            console.log(`${taskItem.taskName}查询失败，错误信息：${JSON.stringify(data)}`)
+                            console.log(`${taskItem.taskName}查询失败：${data.retmsg}`)
                         }
                     }
                 }
@@ -992,13 +1160,13 @@ function orderQuery(getNameOnly) {
                         //console.log(result)
                         if(result.retcode == 0){
                             if(getNameOnly > 0) {
-                                $.log(`获取账户${numUser}昵称成功：${result.shop_asset.nickname}\n`);
+                                $.log(`获取账户${numUser+1}昵称成功：${result.shop_asset.nickname}\n`);
                                 nickname.push(result.shop_asset.nickname)
                             } else {
                                 if(cash != 0){
                                     if(result.cash != null && result.cash.length > 0){
                                         let cashStr = `${cash}元现金`
-                                        for(k=0; k<result.cash.length; k++){
+                                        for(let k=0; k<result.cash.length; k++){
                                             cashItem = result.cash[k]
                                             //console.log(cashItem)
                                             if(cashItem.item_desc == cashStr){
@@ -1154,7 +1322,7 @@ async function userhome() {
 }
 
 //APP长牛任务
-async function bullTask(taskItem, extra="") {
+async function bullTaskDone(taskItem, extra="") {
     rndtime = Math.round(new Date().getTime())
     return new Promise((resolve) => {
         let signurl = {
@@ -1187,23 +1355,23 @@ async function bullTask(taskItem, extra="") {
                             } else if(result.reward_info) {
                                 $.log(`${taskItem.taskName}获得: ${result.reward_info[0].reward_desc}\n`);
                                 await $.wait(Math.random()*2000+7000)
-                                await bullTask(taskItem)
+                                await bullTaskDone(taskItem)
                             } else if(result.award_desc) {
                                 $.log(`${taskItem.taskName}获得: ${result.award_desc}\n`);
                                 await $.wait(Math.random()*1000+2000)
                             } else if(result.skin_info) {
                                 $.log(`${taskItem.taskName}获得: ${result.skin_info.skin_desc}\n`);
                                 await $.wait(Math.random()*2000+3000)
-                                await bullTask(taskItem)
+                                await bullTaskDone(taskItem)
                             } else if(result.skin_list) {
                                 numItem = result.skin_list.length
-                                for(j=0; j<numItem; j++) {
-                                    skinItem = result.skin_list[j] - 1
+                                for(let j=0; j<numItem; j++) {
+                                    skinItem = result.skin_list[j]
                                     if(skinItem.skin_num > 1) {
-                                        numSell = skinItem.skin_num
+                                        numSell = skinItem.skin_num - 1
                                         $.log(`卖出${numSell}个${skinItem.skin_desc}\n`);
-                                        for(k=0; k<numSell; k++) {
-                                            await bullTask(bullTaskArray["sell_skin"],`&skin_type=${skinItem.skin_type}`)
+                                        for(let k=0; k<numSell; k++) {
+                                            await bullTaskDone(bullTaskArray["sell_skin"],`&skin_type=${skinItem.skin_type}`)
                                         }
                                     }
                                 }
@@ -1213,7 +1381,7 @@ async function bullTask(taskItem, extra="") {
                                 $.log(`长牛升级到等级${result.update_new_level}，获得: ${result.level_reward_info.reward_desc}\n`);
                             }
                                 await $.wait(Math.random()*3000+6000)
-                                await bullTask(taskItem)
+                                await bullTaskDone(taskItem)
                             } else {
                                 console.log(result)
                             } 
@@ -1232,7 +1400,7 @@ async function bullTask(taskItem, extra="") {
 }
 
 //APP长牛状态+获取互助码
-async function bullStatus() {
+async function bullStatus(getCodeOnly) {
     rndtime = Math.round(new Date().getTime())
     return new Promise((resolve) => {
         let signurl = {
@@ -1259,18 +1427,31 @@ async function bullStatus() {
                         result = JSON.parse(data);
                         //console.log(result)
                         if(result.retcode == 0) {
-                            bullInviteCodeArr.push(result.invite_code)
-                            bullHelpCodeArr.push(result.help_code)
-                            $.log(`长牛状态：\n`)
-                            $.log(`等级: ${result.bullish_info.level}\n`)
-                            $.log(`下一级需要经验: ${result.bullish_info.next_level_exp}\n`)
-                            $.log(`现有经验: ${result.bullish_info.exp_value}\n`)
-                            $.log(`现有牛气: ${result.bullish_info.bullish_value}，开始喂食\n`)
-                            if(result.bullish_info.bullish_value >= 500) {
-                                await bullTask(bullTaskArray["feed"])
+                            if(result.forbidden_code) {
+                                $.log(`用户${nickname[numUser]}可能已黑号：${result.forbidden_reason}\n`);
+                                bullStatusFlag.push(0)
+                            } else {
+                                bullStatusFlag.push(1)
+                                if(getCodeOnly) {
+                                    if(shareFlag) {
+                                        userAppShareCodeArr["bull_invite"].push(result.invite_code)
+                                        userAppShareCodeArr["bull_help"].push(result.help_code)
+                                        $.log(`获取用户${nickname[numUser]}的长牛互助码: invite_code=${result.invite_code}, help_code=${result.help_code}\n`);
+                                    }
+                                } else {
+                                    $.log(`长牛状态：\n`)
+                                    $.log(`等级: ${result.bullish_info.level}\n`)
+                                    $.log(`下一级需要经验: ${result.bullish_info.next_level_exp}\n`)
+                                    $.log(`现有经验: ${result.bullish_info.exp_value}\n`)
+                                    $.log(`现有牛气: ${result.bullish_info.bullish_value}，开始喂食\n`)
+                                    if(result.bullish_info.bullish_value >= 500) {
+                                        await bullTaskDone(bullTaskArray["feed"])
+                                    }
+                                }
                             }
                         } else {
                             $.log(`查询长牛状态失败：${result.retmsg}\n`);
+                            bullStatusFlag.push(0)
                         }
                     }
                 }
@@ -1377,11 +1558,11 @@ function bullHelpReward(inviteCode="",helpCode="") {
 }
 
 //分享任务-APP端发起
-async function appShareTaskReq(share_type) {
+async function appShareTaskReq(share_type,task_type) {
     rndtime = Math.round(new Date().getTime())
     return new Promise((resolve) => {
         let url = {
-            url: `https://wzq.tenpay.com/cgi-bin/activity/activity_share.fcgi?channel=1&action=query_share_code&share_type=${share_type}&_rndtime=${rndtime}&_appName=${app_appName}&_dev=iPhone13,2&_devId=${app_devId}&_appver=9.5.0&_ifChId=&_isChId=1&_osVer=15.0&openid=${app_openid}&fskey=${app_fskey}&access_token=${app_token}&buildType=store&check=11&_idfa=&lang=zh_CN`,
+            url: `https://wzq.tenpay.com/cgi-bin/activity/activity_share.fcgi?channel=1&action=query_share_code&share_type=${share_type}&_rndtime=${rndtime}&_appName=${app_appName}&_dev=iPhone13,2&_devId=${app_devId}&_appver=${app_appver}&_ifChId=&_isChId=1&_osVer=${app_osVer}&openid=${app_openid}&fskey=${app_fskey}&access_token=${app_token}&buildType=store&check=11&_idfa=&lang=zh_CN`,
             headers: {
                 'Cookie': app_ck,
                 'Accept': `application/json, text/plain, */*`,
@@ -1404,10 +1585,10 @@ async function appShareTaskReq(share_type) {
                         result = JSON.parse(data);
                         //console.log(result)
                         if(result.retcode == 0) {
-                            if(!userAppShareCodeArr[share_type]) {
-                                userAppShareCodeArr[share_type] = []
+                            if(!userAppShareCodeArr[task_type][share_type]) {
+                                userAppShareCodeArr[task_type][share_type] = []
                             }
-                            userAppShareCodeArr[share_type].push(result.share_code)
+                            userAppShareCodeArr[task_type][share_type].push(result.share_code)
                             $.log(`获取用户${nickname[numUser]}的APP的${share_type}互助码: ${result.share_code}\n`);
                         } else {
                             $.log(`获取用户${nickname[numUser]}的APP的${share_type}互助码失败：${result.retmsg}\n`);
@@ -1424,7 +1605,7 @@ async function appShareTaskReq(share_type) {
 }
 
 //分享任务-微信端发起
-function wxShareTaskReq(share_type) {
+function wxShareTaskReq(share_type,task_type) {
     rndtime = Math.round(new Date().getTime())
     return new Promise((resolve, reject) => {
         let url = {
@@ -1454,10 +1635,10 @@ function wxShareTaskReq(share_type) {
                         result = JSON.parse(data);
                         //console.log(data)
                         if(result.retcode == 0) {
-                            if(!userWxShareCodeArr[share_type]) {
-                                userWxShareCodeArr[share_type] = []
+                            if(!userWxShareCodeArr[task_type][share_type]) {
+                                userWxShareCodeArr[task_type][share_type] = []
                             }
-                            userWxShareCodeArr[share_type].push(result.share_code)
+                            userWxShareCodeArr[task_type][share_type].push(result.share_code)
                             $.log(`获取用户${nickname[numUser]}的微信的${share_type}互助码: ${result.share_code}\n`);
                         } else {
                             $.log(`获取用户${nickname[numUser]}的微信的${share_type}互助码失败：${result.retmsg}\n`);
@@ -1526,6 +1707,99 @@ function wxShareTaskDone(share_type,share_code) {
     })
 }
 
+//猜涨跌状态查询
+async function appGuessStatus() {
+    rndtime = Math.round(new Date().getTime())
+    return new Promise((resolve) => {
+        let url = {
+            url: `https://zqact.tenpay.com/cgi-bin/guess_home.fcgi?channel=1&source=2&new_version=2&_=${rndtime}&openid=${app_openid}&fskey=${app_fskey}&access_token=${app_token}&_appName=${app_appName}&_appver=${app_appver}&_osVer=${app_osVer}&_devId=${app_devId}`,
+            headers: {
+                'Cookie': app_ck,
+                'Accept': `application/json, text/plain, */*`,
+                'Connection': `keep-alive`,
+                'Referer': `https://zqact.tenpay.com/activity/page/guessRiseFall/`,
+                'Accept-Encoding': `gzip, deflate, br`,
+                'Host': `zqact.tenpay.com`,
+                'User-Agent': app_UA,
+                'Accept-Language': `zh-cn`
+            },
+        };
+        $.get(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("腾讯自选股: API查询请求失败 ‼️‼️");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        result = JSON.parse(data);
+                        console.log(result)
+                        if(result.retcode == 0) {
+                            
+                        } else {
+                            $.log(`获取用户${nickname[numUser]}的猜涨跌状态失败：${result.retmsg}\n`);
+                        }
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//猜涨跌
+async function appGuessRiseFall(answer) {
+    curTime = new Date()
+    rndtime = Math.round(curTime.getTime())
+    currentHour = curTime.getHours()
+    nextDate = new Date(curTime.getTime() + 24*60*60*1000); //后一天
+    let guessDate = signday
+    if(currentHour > 12) {
+        guessDate = formatDateTime(nextDate)
+    }
+    return new Promise((resolve) => {
+        let url = {
+            url: `https://zqact.tenpay.com/cgi-bin/guess_op.fcgi?action=2&act_id=3&user_answer=${answer}&date=${guessDate}&channel=1&_=${rndtime}&openid=${app_openid}&fskey=${app_fskey}&access_token=${app_token}&_appName=${app_appName}&_appver=${app_appver}&_osVer=${app_osVer}&_devId=${app_devId}`,
+            headers: {
+                'Cookie': app_ck,
+                'Accept': `application/json, text/plain, */*`,
+                'Connection': `keep-alive`,
+                'Referer': `https://zqact.tenpay.com/activity/page/guessRiseFall/`,
+                'Accept-Encoding': `gzip, deflate, br`,
+                'Host': `zqact.tenpay.com`,
+                'User-Agent': app_UA,
+                'Accept-Language': `zh-cn`
+            },
+        };
+        $.get(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("腾讯自选股: API查询请求失败 ‼️‼️");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        result = JSON.parse(data);
+                        //console.log(result)
+                        if(result.retcode == 0) {
+                            guessStr = (answer==1) ? "猜涨" : "猜跌"
+                            $.log(`用户${nickname[numUser]}猜涨跌成功：${guessStr}\n`);
+                        } else {
+                            $.log(`用户${nickname[numUser]}猜涨跌失败：${result.retmsg}\n`);
+                        }
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
 ////////////////////////////////////////////////////////////////////
 
 function time(time) {
