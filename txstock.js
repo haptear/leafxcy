@@ -7,12 +7,12 @@
 
 内置了多账户相互做分享任务，账户数多于一个才能用
 测试了做分享任务的情况下，一天收益大概在14000金币
-默认自动提现5元，做分享任务，做新手任务
+默认自动提现5元，不做分享任务，不做新手任务
 新手任务可能需要跑几次才能做完，不过每天跑的话总会做完的
 
 不想提现的话自己新建一个TxStockCash环境变量，0代表不提现，1代表提现1元，5代表提现5元
-不想做分享任务的话，新建一个TxStockHelp环境变量，0代表不做分享互助，1代表做分享互助
-不想做新手任务的话，新建一个TxStockNewbie环境变量，0代表不做新手任务，1代表做新手任务
+想做分享任务的话，新建一个TxStockHelp环境变量，0代表不做分享互助，1代表做分享互助
+想做新手任务的话，新建一个TxStockNewbie环境变量，0代表不做新手任务，1代表做新手任务
 
 
 青龙：
@@ -51,8 +51,8 @@ const notifyInterval = 1; //0为关闭通知，1为所有通知,默认为0
 let rndtime = "" //毫秒
 let signday = formatDateTime(new Date());
 var cash = ($.isNode() ? (process.env.TxStockCash) : ($.getval('TxStockCash'))) || 5; //0为不自动提现,1为自动提现1元,5为自动提现5元
-var help = ($.isNode() ? (process.env.TxStockHelp) : ($.getval('TxStockHelp'))) || 1; //0为不做分享助力任务，1为多账户互相分享助力
-var newbie = ($.isNode() ? (process.env.TxStockHelp) : ($.getval('TxStockNewbie'))) || 1; //0为不做新手任务，1为自动做新手任务
+var help = ($.isNode() ? (process.env.TxStockHelp) : ($.getval('TxStockHelp'))) || 0; //0为不做分享助力任务，1为多账户互相分享助力
+var newbie = ($.isNode() ? (process.env.TxStockHelp) : ($.getval('TxStockNewbie'))) || 0; //0为不做新手任务，1为自动做新手任务
 
 const appUrlArr = [];
 let appUrlArrVal = "";
