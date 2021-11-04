@@ -52,7 +52,7 @@ let rndtime = "" //毫秒
 let signday = formatDateTime(new Date());
 var cash = ($.isNode() ? (process.env.TxStockCash) : ($.getval('TxStockCash'))) || 5; //0为不自动提现,1为自动提现1元,5为自动提现5元
 var help = ($.isNode() ? (process.env.TxStockHelp) : ($.getval('TxStockHelp'))) || 0; //0为不做分享助力任务，1为多账户互相分享助力
-var newbie = ($.isNode() ? (process.env.TxStockHelp) : ($.getval('TxStockNewbie'))) || 0; //0为不做新手任务，1为自动做新手任务
+var newbie = ($.isNode() ? (process.env.TxStockNewbie) : ($.getval('TxStockNewbie'))) || 0; //0为不做新手任务，1为自动做新手任务
 
 const appUrlArr = [];
 let appUrlArrVal = "";
@@ -94,6 +94,9 @@ let userAppShareCodeArr = {
     "newbie": {},
     "bull_invite": [],
     "bull_help": [],
+    "guess_invite": [],
+    "guess_ticket": [],
+    "guess_time": [],
 }
 
 let userWxShareTaskList = {
@@ -443,6 +446,8 @@ async function shareTask()
         {
             await getEnvParam(numUser)
             
+            await appGuessStatus();
+            
             if(appShareFlag) {
                 for(let j=0; j<userAppShareTaskList["daily"].length; j++)
                 {
@@ -467,16 +472,21 @@ async function shareTask()
             for (helpUser = 0; helpUser < totalUser; helpUser++){
                 if(helpUser != numUser) {
                     
-                    if(userAppShareCodeArr["bull_invite"].length > 0 && userAppShareCodeArr["bull_help"].length > 0)
+                    if(userAppShareCodeArr["bull_invite"][helpUser]&& userAppShareCodeArr["bull_help"][helpUser])
                     {
                         await bullInvite(userAppShareCodeArr["bull_invite"][helpUser],userAppShareCodeArr["bull_help"][helpUser])
+                    }
+                    
+                    if(userAppShareCodeArr["guess_invite"][helpUser] && userAppShareCodeArr["guess_ticket"][helpUser] && userAppShareCodeArr["guess_time"][helpUser])
+                    {
+                        await wxGuessHelp(userAppShareCodeArr["guess_invite"][helpUser],userAppShareCodeArr["guess_ticket"][helpUser],userAppShareCodeArr["guess_time"][helpUser]);
                     }
                     
                     if(appShareFlag) {
                         for(let j=0; j<userAppShareTaskList["daily"].length; j++)
                         {
                             shareTaskName = userAppShareTaskList["daily"][j]
-                            if(userAppShareCodeArr["daily"][shareTaskName]) {
+                            if(userAppShareCodeArr["daily"][shareTaskName] && userAppShareCodeArr["daily"][shareTaskName][helpUser]) {
                                 await wxShareTaskDone(shareTaskName,userAppShareCodeArr["daily"][shareTaskName][helpUser])
                             }
                         }
@@ -486,7 +496,7 @@ async function shareTask()
                         for(let j=0; j<userWxShareTaskList["daily"].length; j++)
                         {
                             shareTaskName = userWxShareTaskList["daily"][j]
-                            if(userWxShareCodeArr["daily"][shareTaskName]) {
+                            if(userWxShareCodeArr["daily"][shareTaskName] && userWxShareCodeArr["daily"][shareTaskName][helpUser]) {
                                 await wxShareTaskDone(shareTaskName,userWxShareCodeArr["daily"][shareTaskName][helpUser])
                             }
                         }
@@ -566,6 +576,10 @@ async function signStatus() {
                         data = JSON.parse(data);
                         //console.log(data);
                         if (data.retcode == 0) {
+                            if(data.lotto_ticket) {
+                                console.log(data);
+                                //7天连续签到奖励?
+                            }
                             if(!data.forbidden_code) {
                                 $.log(`用户${nickname[numUser]}已连续签到${data.task_pkg.continue_sign_days}天，总签到天数${data.task_pkg.total_sign_days}天\n`);
                                 for(let i=0; i<data.task_pkg.tasks.length; i++){
@@ -699,7 +713,7 @@ async function appTaskList(taskItem) {
                                 }
                             }
                         } else {
-                            console.log(`${taskItem.taskName}查询失败：${data.retmsg}`)
+                            console.log(`${taskItem.taskName}[actid=${actid}]查询失败：${data.retmsg}`)
                         }
                     }
                 }
@@ -1359,20 +1373,17 @@ async function bullTaskDone(taskItem, extra="") {
                             } else if(result.award_desc) {
                                 $.log(`${taskItem.taskName}获得: ${result.award_desc}\n`);
                                 await $.wait(Math.random()*1000+2000)
+                                await bullTaskDone(taskItem,`&skin_type=${skinItem.skin_type}`)
                             } else if(result.skin_info) {
                                 $.log(`${taskItem.taskName}获得: ${result.skin_info.skin_desc}\n`);
                                 await $.wait(Math.random()*2000+3000)
                                 await bullTaskDone(taskItem)
                             } else if(result.skin_list) {
-                                numItem = result.skin_list.length
+                                let numItem = result.skin_list.length
                                 for(let j=0; j<numItem; j++) {
-                                    skinItem = result.skin_list[j]
+                                    let skinItem = result.skin_list[j]
                                     if(skinItem.skin_num > 1) {
-                                        numSell = skinItem.skin_num - 1
-                                        $.log(`卖出${numSell}个${skinItem.skin_desc}\n`);
-                                        for(let k=0; k<numSell; k++) {
-                                            await bullTaskDone(bullTaskArray["sell_skin"],`&skin_type=${skinItem.skin_type}`)
-                                        }
+                                        await bullTaskDone(bullTaskArray["sell_skin"],`&skin_type=${skinItem.skin_type}`)
                                     }
                                 }
                             } else if(result.feed_reward_info) {
@@ -1593,6 +1604,7 @@ async function appShareTaskReq(share_type,task_type) {
                         } else {
                             $.log(`获取用户${nickname[numUser]}的APP的${share_type}互助码失败：${result.retmsg}\n`);
                         }
+                        await $.wait(1000)
                     }
                 }
             } catch (e) {
@@ -1670,7 +1682,7 @@ function wxShareTaskDone(share_type,share_code) {
                 'Host': `wzq.tenpay.com`,
                 'Connection': `keep-alive`,
                 'User-Agent': wx_UA,
-                'Referer': `https://wzq.tenpay.com/mp/v2/index.html`,
+                'Referer': `https://wzq.tenpay.com/mp/v2/index.html&__share_flag__=1`,
                 'Accept-Language': `zh-cn`
             },
         };
@@ -1707,7 +1719,7 @@ function wxShareTaskDone(share_type,share_code) {
     })
 }
 
-//猜涨跌状态查询
+//猜涨跌获取互助码
 async function appGuessStatus() {
     rndtime = Math.round(new Date().getTime())
     return new Promise((resolve) => {
@@ -1733,12 +1745,21 @@ async function appGuessStatus() {
                 } else {
                     if (safeGet(data)) {
                         result = JSON.parse(data);
-                        console.log(result)
+                        //console.log(result)
                         if(result.retcode == 0) {
-                            
+                            if(result.invite_info.invite_code && result.invite_info.invite_ticket && result.invite_info.invite_time) {
+                                userAppShareCodeArr["guess_invite"].push(result.invite_info.invite_code)
+                                userAppShareCodeArr["guess_ticket"].push(result.invite_info.invite_ticket)
+                                userAppShareCodeArr["guess_time"].push(result.invite_info.invite_time)
+                                $.log(`获取用户${nickname[numUser]}的猜涨跌互助码：${result.invite_info.invite_code}\n`);
+                                $.log(`获取用户${nickname[numUser]}的猜涨跌票据：${result.invite_info.invite_ticket}\n`);
+                            } else {
+                                $.log(`获取用户${nickname[numUser]}的猜涨跌互助码失败\n`);
+                            }
                         } else {
                             $.log(`获取用户${nickname[numUser]}的猜涨跌状态失败：${result.retmsg}\n`);
                         }
+                        await $.wait(1000)
                     }
                 }
             } catch (e) {
@@ -1748,6 +1769,53 @@ async function appGuessStatus() {
             }
         });
     });
+}
+
+//猜涨跌互助
+function wxGuessHelp(invite_code="",invite_ticket="",invite_time="") {
+    let guessTicket = encodeURI(invite_ticket)
+    let guessTime = invite_time.slice(0,-3)
+    rndtime = Math.round(new Date().getTime())
+    return new Promise((resolve, reject) => {
+        let url = {
+            url: `https://zqact.tenpay.com/cgi-bin/guess_home.fcgi?channel=0&source=2&new_version=2&invite_code=${invite_code}&invite_time=${guessTime}&invite_ticket=${guessTicket}&_=${rndtime}`,
+            headers: {
+                'Accept': `*/*`,
+                'Accept-Encoding': `gzip, deflate, br`,
+                'Cookie': wx_ck,
+                'Content-Type': `application/x-www-form-urlencoded`,
+                'Host': `zqact.tenpay.com`,
+                'Connection': `keep-alive`,
+                'User-Agent': wx_UA,
+                'Referer': `https://zqact.tenpay.com/activity/page/guessRiseFall/`,
+                'Accept-Language': `zh-cn`
+            },
+        };
+        $.get(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("腾讯自选股: API查询请求失败 ‼️‼️");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        result = JSON.parse(data);
+                        //console.log(data)
+                        if(result.retcode == 0) {
+                            $.log(`用户${nickname[numUser]}互助成功\n`);
+                        } else {
+                            $.log(`用户${nickname[numUser]}互助失败：${result.retmsg}\n`);
+                        }
+                        await $.wait(1000)
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        })
+    })
 }
 
 //猜涨跌
