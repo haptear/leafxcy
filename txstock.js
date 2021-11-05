@@ -4,7 +4,7 @@
 只适配了IOS，测试了青龙和V2P，其他平台请自行测试，安卓请自行测试
 多账户用#隔开
 
-建议在11点30分到13点之间跑，可以根据当天涨跌情况猜涨跌
+脚本只会在10点到13点之间进行猜涨跌，请务必在这段时间内跑一次脚本，猜涨跌开奖时间为15:15
 有些任务会提示任务完成发奖失败 -- 可以忽略
 或者任务完成前置条件不符合 -- 待解决
 
@@ -37,7 +37,7 @@ MITM: wzq.tenpay.com
 圈X：
 [task_local]
 #腾讯自选股
-35 11 * * * txstock.js, tag=腾讯自选股, enabled=true
+16 12,15 * * * txstock.js, tag=腾讯自选股, enabled=true
 [rewrite_local]
 #获取APP和微信微证券的URL和header
 https://wzq.tenpay.com/cgi-bin/activity_task_daily.fcgi? url script-request-header https://raw.githubusercontent.com/leafxcy/JavaScript/main/txstock.js
@@ -48,11 +48,10 @@ hostname = wzq.tenpay.com
 
 const jsname = '腾讯自选股'
 const $ = Env(jsname)
-const logs = 0; //0为关闭日志，1为开启,默认为0
-const notifyInterval = 1; //0为关闭通知，1为所有通知,默认为0
+const notifyFlag = 1; //0为关闭通知，1为打开通知,默认为1
 
 let rndtime = "" //毫秒
-let signday = formatDateTime(new Date());
+let todayDate = formatDateTime(new Date());
 var cash = ($.isNode() ? (process.env.TxStockCash) : ($.getval('TxStockCash'))) || 5; //0为不自动提现,1为自动提现1元,5为自动提现5元
 var help = ($.isNode() ? (process.env.TxStockHelp) : ($.getval('TxStockHelp'))) || 1; //0为不做分享助力任务，1为多账户互相分享助力
 var newbie = ($.isNode() ? (process.env.TxStockNewbie) : ($.getval('TxStockNewbie'))) || 0; //0为不做新手任务，1为自动做新手任务
@@ -70,6 +69,7 @@ let rewardCoin = 0
 let coinStart = []
 let coinEnd = []
 let coinInfo = ""
+let notifyStr = ""
 
 let numUser = 0
 let totalUser = 0
@@ -197,13 +197,29 @@ var TxStockWxHeader
             
             $.log(`\n======= 结束腾讯自选股账号 ${numUser+1} 任务 =======\n`)
         }
+        
+        await showmsg()
     }
   
 
 })()
 .catch((e) => $.logErr(e))
 .finally(() => $.done())
-  
+
+//通知
+function showmsg() {
+    
+    notifyBody = jsname + "运行通知\n\n" + notifyStr
+    
+    if (notifyFlag != 1) {
+        console.log(notifyBody);
+    }
+
+    if (notifyFlag == 1) {
+        $.msg(notifyBody);
+    }
+}
+
 async function getRewrite()
 {
     if($request.url.indexOf("activity_task_daily.fcgi?") > -1) {
@@ -317,7 +333,7 @@ async function initAccountInfo()
     {
         await getEnvParam(numUser)
         
-        await orderQuery(1,1,0); //获取用户名
+        await orderQuery(1,1,0,0); //获取用户名
         coinStart.push(coinInfo)
         await $.wait(500)
         
@@ -520,13 +536,14 @@ async function shareTask()
 
 async function todayIncome()
 {
-    await orderQuery(0,1,1)
+    await orderQuery(0,1,1,1)
     coinEnd.push(coinInfo)
     
     if(coinEnd[numUser] && coinStart[numUser])
     {
         rewardCoin = coinEnd[numUser] - coinStart[numUser];
-        $.log(`\n账号：${nickname[numUser]}，本次运行获得${rewardCoin}金币\n`)
+        $.log(`账号：${nickname[numUser]}，本次运行获得${rewardCoin}金币\n\n`)
+        notifyStr += `账号：${nickname[numUser]}，本次运行获得${rewardCoin}金币\n\n`
     }
 }
 
@@ -588,7 +605,7 @@ async function signStatus(actid,signType) {
                                 if(signType == 0){
                                     for(let i=0; i<data.task_pkg.tasks.length; i++){
                                         resultItem = data.task_pkg.tasks[i]
-                                        if(resultItem.date == signday){
+                                        if(resultItem.date == todayDate){
                                             if(resultItem.status == 0){
                                                 //今天未签到，去签到
                                                 await $.wait(200);
@@ -628,7 +645,7 @@ async function signtask(actid) {
     rndtime = Math.round(new Date().getTime())
     return new Promise((resolve) => {
         let signurl = {
-            url: `https://wzq.tenpay.com/cgi-bin/activity_sign_task.fcgi?actid=${actid}&channel=1&action=signdone&date=${signday}&_=${rndtime}&openid=${app_openid}&fskey=${app_fskey}&access_token=${app_token}&_appName=${app_appName}&_appver=${app_appver}&_osVer=${app_osVer}&_devId=${app_devId}`,
+            url: `https://wzq.tenpay.com/cgi-bin/activity_sign_task.fcgi?actid=${actid}&channel=1&action=signdone&date=${todayDate}&_=${rndtime}&openid=${app_openid}&fskey=${app_fskey}&access_token=${app_token}&_appName=${app_appName}&_appver=${app_appver}&_osVer=${app_osVer}&_devId=${app_devId}`,
             headers: {
                 'Cookie': app_ck,
                 'Accept': `application/json, text/plain, */*`,
@@ -1267,7 +1284,7 @@ async function wxTaskDone(taskItem,wxticket,task_id,task_tid) {
 }
 
 //提现查询
-async function orderQuery(getName,getCoinNum,isWithdraw) {
+async function orderQuery(getName,getCoinNum,isWithdraw,logCoin) {
     rndtime = Math.round(new Date().getTime())
     return new Promise((resolve, reject) => {
         let testurl = {
@@ -1302,6 +1319,9 @@ async function orderQuery(getName,getCoinNum,isWithdraw) {
                                 coinInfo = result.shop_asset.amount
                             }
                             $.log(`账户${nickname[numUser]}金币余额: ${result.shop_asset.amount}\n`);
+                            if(logCoin) {
+                                notifyStr += `账户${nickname[numUser]}金币余额: ${result.shop_asset.amount}\n`
+                            }
                             if(cash != 0 && isWithdraw == 1) {
                                 if(result.cash != null && result.cash.length > 0){
                                     let cashStr = `${cash}元现金`
@@ -1311,10 +1331,11 @@ async function orderQuery(getName,getCoinNum,isWithdraw) {
                                         if(cashItem.item_desc == cashStr){
                                             $.log(`提现${cashItem.item_desc}，需要${cashItem.coins}金币\n`);
                                             if(coinInfo-cashItem.coins >= 0){
-                                                $.log(`账户金币余额多于${cashItem.coins}，开始提现\n`);
+                                                $.log(`账户${nickname[numUser]}金币余额多于${cashItem.coins}，开始提现${cashStr}\n`);
+                                                notifyStr += `账户${nickname[numUser]}金币余额多于${cashItem.coins}，开始提现${cashStr}\n`
                                                 await cashTicket(cashItem.item_id)
                                             } else {
-                                                $.log(`账户金币余额少于${cashItem.coins}\n`);
+                                                $.log(`账户${nickname[numUser]}金币余额不足，不进行提现\n`);
                                             }
                                         }
                                     }
@@ -1405,10 +1426,12 @@ async function getcash(cashticketFb,item_id) {
                         //console.log(data)
                         if(data.retcode == 0){
                             $.log(`提现结果:${data.retmsg}`);
+                            notifyStr += `提现结果:${data.retmsg}\n`
                             $.log(`查询剩余金额：\n`);
-                            await orderQuery(0,0,0)
+                            await orderQuery(0,0,0,1)
                         } else {
                             $.log(`提现失败：${data.retmsg}\n`)
+                            notifyStr += `提现失败：${data.retmsg}\n`
                         }
                     }
                 }
@@ -1566,7 +1589,7 @@ async function bullInvite(inviteCode="",helpCode="") {
     rndtime = Math.round(new Date().getTime())
     return new Promise((resolve, reject) => {
         let url = {
-            url: `https://zqact03.tenpay.com/cgi-bin/activity_year_party.fcgi?invite_code=${inviteCode}&help_code=${helpCode}&share_date=${signday}&type=bullish&action=home&actid=1105&_=${rndtime}`,
+            url: `https://zqact03.tenpay.com/cgi-bin/activity_year_party.fcgi?invite_code=${inviteCode}&help_code=${helpCode}&share_date=${todayDate}&type=bullish&action=home&actid=1105&_=${rndtime}`,
             headers: {
                 'Accept': `application/json, text/plain, */*`,
                 'Accept-Encoding': `gzip, deflate, br`,
@@ -1575,7 +1598,7 @@ async function bullInvite(inviteCode="",helpCode="") {
                 'Host': `zqact03.tenpay.com`,
                 'Connection': `keep-alive`,
                 'User-Agent': wx_UA,
-                'Referer': `https://zqact03.tenpay.com/activity/page/raisebull/?inviteCode=${inviteCode}&helpCode=${helpCode}&date=${signday}`,
+                'Referer': `https://zqact03.tenpay.com/activity/page/raisebull/?inviteCode=${inviteCode}&helpCode=${helpCode}&date=${todayDate}`,
                 'Accept-Language': `zh-cn`
             },
         };
@@ -1611,7 +1634,7 @@ async function bullHelpReward(inviteCode="",helpCode="") {
     rndtime = Math.round(new Date().getTime())
     return new Promise((resolve, reject) => {
         let url = {
-            url: `https://zqact03.tenpay.com/cgi-bin/activity_year_party.fcgi?type=bullish&action=help&actid=1105&help_code=${helpCode}&share_date=${signday}&_=${rndtime}`,
+            url: `https://zqact03.tenpay.com/cgi-bin/activity_year_party.fcgi?type=bullish&action=help&actid=1105&help_code=${helpCode}&share_date=${todayDate}&_=${rndtime}`,
             headers: {
                 'Accept': `application/json, text/plain, */*`,
                 'Accept-Encoding': `gzip, deflate, br`,
@@ -1620,7 +1643,7 @@ async function bullHelpReward(inviteCode="",helpCode="") {
                 'Host': `zqact03.tenpay.com`,
                 'Connection': `keep-alive`,
                 'User-Agent': wx_UA,
-                'Referer': `https://zqact03.tenpay.com/activity/page/raisebull/?inviteCode=${inviteCode}&helpCode=${helpCode}&date=${signday}&_=${rndtime}`,
+                'Referer': `https://zqact03.tenpay.com/activity/page/raisebull/?inviteCode=${inviteCode}&helpCode=${helpCode}&date=${todayDate}&_=${rndtime}`,
                 'Accept-Language': `zh-cn`
             },
         };
@@ -1853,7 +1876,10 @@ async function wxGuessHelp(invite_code="",invite_ticket="",invite_time="") {
 
 //猜涨跌状态，获取互助码
 async function appGuessStatus(isGuess) {
-    rndtime = Math.round(new Date().getTime())
+    curTime = new Date()
+    rndtime = Math.round(curTime.getTime())
+    currentHour = curTime.getHours()
+    let isGuessTime = ((currentHour < 13) && (currentHour > 9)) ? 1 : 0
     return new Promise((resolve) => {
         let url = {
             url: `https://zqact.tenpay.com/cgi-bin/guess_home.fcgi?channel=1&source=2&new_version=2&_=${rndtime}&openid=${app_openid}&fskey=${app_fskey}&access_token=${app_token}&_appName=${app_appName}&_appver=${app_appver}&_osVer=${app_osVer}&_devId=${app_devId}`,
@@ -1881,12 +1907,17 @@ async function appGuessStatus(isGuess) {
                         if(result.retcode == 0) {
                             if(isGuess == 1) {
                                 await $.wait(1000)
-                                if(result.notice_info && result.notice_info.answer_status == 1) {
-                                    $.log(`上期猜涨跌回答正确，正在取得奖励\n`);
-                                    await appGuessAward(result.notice_info.date)
+                                if(result.notice_info) {
+                                    //console.log(result)
+                                    if(result.notice_info.answer_status == 1) {
+                                        $.log(`上期猜涨跌回答正确，正在取得奖励\n`);
+                                        await appGuessAward(result.notice_info.date)
+                                    } else {
+                                        $.log(`上期猜涨跌回答错误\n`);
+                                    }
                                     await $.wait(1000)
                                 }
-                                if((result.T_info && result.T_info.user_answer == 0) || (result.T1_info && result.T1_info.user_answer == 0)) {
+                                if(isGuessTime && ((result.T_info && result.T_info.user_answer == 0) || (result.T1_info && result.T1_info.user_answer == 0))) {
                                     let guessOption = 1
                                     if(result.stockinfo) {
                                         let guessOption = (result.stockinfo.zdf.substr(0,1) == '-') ? 2 : 1
@@ -1894,7 +1925,16 @@ async function appGuessStatus(isGuess) {
                                     } else {
                                         $.log(`未获取到上证指数状态，默认为你猜涨\n`);
                                     }
-                                    await appGuessRiseFall(guessOption)
+                                    if(result.date_list) {
+                                        for(let i=0; i<result.date_list.length; i++) {
+                                            let guessItem = result.date_list[i]
+                                            if(guessItem.status == 3 && guessItem.date == todayDate) {
+                                                await appGuessRiseFall(guessOption,guessItem.date)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    $.log(`脚本只会在10点到13点之间进行竞猜，当前为非竞猜时段\n`);
                                 }
                             } else {
                                 if(result.invite_info.invite_code && result.invite_info.invite_ticket && result.invite_info.invite_time) {
@@ -1966,15 +2006,8 @@ async function appGuessAward(guessDate) {
 }
 
 //猜涨跌
-async function appGuessRiseFall(answer) {
-    curTime = new Date()
-    rndtime = Math.round(curTime.getTime())
-    currentHour = curTime.getHours()
-    nextDate = new Date(curTime.getTime() + 24*60*60*1000); //后一天
-    let guessDate = signday
-    if(currentHour > 12) {
-        guessDate = formatDateTime(nextDate)
-    }
+async function appGuessRiseFall(answer,guessDate) {
+    rndtime = Math.round(new Date().getTime())
     return new Promise((resolve) => {
         let url = {
             url: `https://zqact.tenpay.com/cgi-bin/guess_op.fcgi?action=2&act_id=3&user_answer=${answer}&date=${guessDate}&channel=1&_=${rndtime}&openid=${app_openid}&fskey=${app_fskey}&access_token=${app_token}&_appName=${app_appName}&_appver=${app_appver}&_osVer=${app_osVer}&_devId=${app_devId}`,
