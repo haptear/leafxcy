@@ -50,6 +50,7 @@ const jsname = '腾讯自选股'
 const $ = Env(jsname)
 const notifyFlag = 1; //0为关闭通知，1为打开通知,默认为1
 
+let sessionTime = Math.round(new Date().getTime())
 let rndtime = "" //毫秒
 let todayDate = formatDateTime(new Date());
 var cash = ($.isNode() ? (process.env.TxStockCash) : ($.getval('TxStockCash'))) || 5; //0为不自动提现,1为自动提现1元,5为自动提现5元
@@ -86,8 +87,10 @@ let wxTaskFlag = 1
 let bullishFlag = 1
 let bullHelpFlag = 0
 
+let logDebug = 0
+
 let userAppShareTaskList = {
-    "daily": ["task_50_1111", "task_51_1111", ],
+    "daily": ["news_share", "task_50_1111", "task_51_1111", "task_72_1113", "task_74_1113", ],
     "newbie": [],
     
 }
@@ -102,7 +105,7 @@ let userAppShareCodeArr = {
 }
 
 let userWxShareTaskList = {
-    "daily": ["task_50_1100", "task_51_1100", "news_share", "task_66_1110", "task_50_1110", "task_51_1110", "task_51_1112", "task_51_1113", ],
+    "daily": ["task_50_1100", "task_51_1100", "task_66_1110", "task_50_1110", "task_51_1110", "task_51_1112", "task_51_1113", ],
     "newbie": ["task_50_1032", "task_51_1032"],
 }
 let userWxShareCodeArr = {
@@ -222,20 +225,24 @@ function showmsg() {
 
 async function getRewrite()
 {
-    if($request.url.indexOf("activity_task_daily.fcgi?") > -1) {
+    if($request.url.indexOf("activity_task_daily.fcgi?") > -1 ||
+       $request.url.indexOf("activity_task_continue.fcgi?") > -1) {
         if($request.url.indexOf("openid=") > -1)
         {
             //APP包
             $.setdata($request.url,'TxStockAppUrl')
             $.log(`获取TxStockAppUrl成功: ${$request.url}\n`)
+            $.msg(`获取TxStockAppUrl成功: ${$request.url}\n`)
             $.setdata(JSON.stringify($request.headers),'TxStockAppHeader')
             $.log(`获取TxStockAppHeader成功: ${JSON.stringify($request.headers)}\n`)
+            $.msg(`获取TxStockAppHeader成功: ${JSON.stringify($request.headers)}\n`)
         }
         else
         {
             //微信包
             $.setdata(JSON.stringify($request.headers),'TxStockWxHeader')
             $.log(`获取TxStockWxHeader成功: ${JSON.stringify($request.headers)}\n`)
+            $.msg(`获取TxStockAppHeader成功: ${JSON.stringify($request.headers)}\n`)
         }
     }
 }
@@ -267,6 +274,9 @@ async function checkEnv()
     if (TxStockAppUrl.indexOf('#') > -1) {
         appUrlArrs = TxStockAppUrl.split('#');
         console.log(`您选择的是用"#"隔开TxStockAppUrl\n`)
+    } else if (TxStockAppUrl.indexOf('\n') > -1) {
+        appUrlArrs = TxStockAppUrl.split('\n');
+        console.log(`您选择的是用"\\n"隔开TxStockAppUrl\n`)
     } else {
         appUrlArrs = [TxStockAppUrl]
     };
@@ -279,6 +289,9 @@ async function checkEnv()
     if (TxStockAppHeader.indexOf('#') > -1) {
         appHeaderArrs = TxStockAppHeader.split('#');
         console.log(`您选择的是用"#"隔开TxStockAppHeader\n`)
+    } else if (TxStockAppHeader.indexOf('\n') > -1) {
+        appHeaderArrs = TxStockAppHeader.split('\n');
+        console.log(`您选择的是用"\\n"隔开TxStockAppHeader\n`)
     } else {
         appHeaderArrs = [TxStockAppHeader]
     };
@@ -291,6 +304,9 @@ async function checkEnv()
     if (TxStockWxHeader.indexOf('#') > -1) {
         wxHeaderArrs = TxStockWxHeader.split('#');
         console.log(`您选择的是用"#"隔开TxStockWxHeader\n`)
+    } else if (TxStockWxHeader.indexOf('\n') > -1) {
+        wxHeaderArrs = TxStockWxHeader.split('\n');
+        console.log(`您选择的是用"\\n"隔开TxStockWxHeader\n`)
     } else {
         wxHeaderArrs = [TxStockWxHeader]
     };
@@ -302,6 +318,7 @@ async function checkEnv()
     
     totalUser = appUrlArr.length
     shareFlag = (help && totalUser > 1)
+    $.log(`共找到${totalUser}个账号\n`)
     
     return true
 }
@@ -310,6 +327,7 @@ async function getEnvParam(userNum)
 {
     appUrlArrVal = appUrlArr[userNum];
     appHeaderArrVal = JSON.parse(appHeaderArr[userNum]);
+    wxHeaderArrVal = JSON.parse(wxHeaderArr[userNum]);
     
     app_openid = appUrlArrVal.match(/&openid=([\w-]+)/)[1]
     app_fskey = appUrlArrVal.match(/&fskey=([\w-]+)/)[1]
@@ -321,10 +339,27 @@ async function getEnvParam(userNum)
     
     app_ck = appHeaderArrVal["Cookie"]
     app_UA = appHeaderArrVal["User-Agent"]
-    wxHeaderArrVal = JSON.parse(wxHeaderArr[userNum]);
     
-    wx_ck = wxHeaderArrVal["Cookie"]
     wx_UA = wxHeaderArrVal["User-Agent"]
+    
+    pgv_info = wxHeaderArrVal["Cookie"].match(/pgv_info=([\w=]+)/)[1]
+    pgv_pvid = wxHeaderArrVal["Cookie"].match(/pgv_pvid=([\w]+)/)[1]
+    ts_last = wxHeaderArrVal["Cookie"].match(/ts_last=([\w\/]+)/)[1]
+    ts_refer = wxHeaderArrVal["Cookie"].match(/ts_refer=([\w\/\.]+)/)[1]
+    ts_sid = wxHeaderArrVal["Cookie"].match(/ts_sid=([\w]+)/)[1]
+    ts_uid = wxHeaderArrVal["Cookie"].match(/ts_uid=([\w]+)/)[1]
+    qlappid = wxHeaderArrVal["Cookie"].match(/qlappid=([\w]+)/)[1]
+    qlskey = wxHeaderArrVal["Cookie"].match(/qlskey=([\w]+)/)[1]
+    qluin = wxHeaderArrVal["Cookie"].match(/qluin=([\w@\.]+)/)[1]
+    qq_logtype = wxHeaderArrVal["Cookie"].match(/qq_logtype=([\w]+)/)[1]
+    wzq_qlappid = wxHeaderArrVal["Cookie"].match(/wzq_qlappid=([\w]+)/)[1]
+    wzq_qlskey = wxHeaderArrVal["Cookie"].match(/wzq_qlskey=([\w]+)/)[1]
+    wzq_qluin = wxHeaderArrVal["Cookie"].match(/wzq_qluin=([\w-]+)/)[1]
+    zxg_openid = wxHeaderArrVal["Cookie"].match(/zxg_openid=([\w-]+)/)[1]
+    
+    //wx_ck = `pgv_info=${pgv_info}; pgv_pvid=${pgv_pvid}; ts_last=${ts_last}; ts_refer=${ts_refer}; ts_sid=${ts_sid}; ts_uid=${ts_uid}; qlappid=${qlappid}; qlskey=${qlskey}; qluin=${qluin}; qq_logtype=${qq_logtype}; wx_session_time=${sessionTime}; wzq_qlappid=${wzq_qlappid}; wzq_qlskey=${wzq_qlskey}; wzq_qluin=${wzq_qluin}; zxg_openid=${zxg_openid}`
+    
+    wx_ck = `pgv_info=${pgv_info}; pgv_pvid=${pgv_pvid}; ts_last=${ts_last}; ts_refer=${ts_refer}; ts_sid=${ts_sid}; ts_uid=${ts_uid}; qlappid=${qlappid}; qlskey=${qlskey}; qluin=${qluin}; qq_logtype=${qq_logtype}; wzq_qlappid=${wzq_qlappid}; wzq_qlskey=${wzq_qlskey}; wzq_qluin=${wzq_qluin}; zxg_openid=${zxg_openid}`
 }
 
 async function initAccountInfo()
@@ -374,7 +409,7 @@ async function initTaskList()
 
 async function bullTask() 
 {
-    if(bullishFlag == 1 && bullStatusFlag[numUser]) {
+    if(bullishFlag == 1 && bullStatusFlag[numUser] == 1) {
         await bullTaskDone(bullTaskArray["rock_bullish"])
         for(let i=0; i<10; i++){
             await bullTaskDone(bullTaskArray["open_box"])
@@ -487,49 +522,49 @@ async function shareTask()
         {
             await getEnvParam(numUser)
             
-            $.log(`\n======= 账户${nickname[numUser]} 开始帮助其他账户=======\n`)
-            for (helpUser = 0; helpUser < totalUser; helpUser++){
-                if(helpUser != numUser) {
+            //循环帮助
+            //helpUser = ((numUser+1) == totalUser) ?  0 : (numUser+1)
+            helpUser = ((numUser-1) <0) ?  (totalUser-1) : (numUser-1)
+            $.log(`\n======= 账户${nickname[numUser]} 开始帮助 账户${nickname[helpUser]} =======\n`)
                     
-                    //长牛互助，同一账户只能相互助力3次，默认不跑
-                    if(bullHelpFlag == 1) {
-                        if(userAppShareCodeArr["bull_invite"][helpUser]&& userAppShareCodeArr["bull_help"][helpUser])
-                        {
-                            await bullInvite(userAppShareCodeArr["bull_invite"][helpUser],userAppShareCodeArr["bull_help"][helpUser])
-                        }
-                        
-                        if(userAppShareCodeArr["guess_invite"][helpUser] && userAppShareCodeArr["guess_ticket"][helpUser] && userAppShareCodeArr["guess_time"][helpUser])
-                        {
-                            await wxGuessHelp(userAppShareCodeArr["guess_invite"][helpUser],userAppShareCodeArr["guess_ticket"][helpUser],userAppShareCodeArr["guess_time"][helpUser]);
-                        }
-                    }
-                    
-                    //APP助力任务
-                    if(appShareFlag == 1) {
-                        for(let j=0; j<userAppShareTaskList["daily"].length; j++)
-                        {
-                            shareTaskName = userAppShareTaskList["daily"][j]
-                            if(userAppShareCodeArr["daily"][shareTaskName] && userAppShareCodeArr["daily"][shareTaskName][helpUser]) {
-                                await wxShareTaskDone(shareTaskName,userAppShareCodeArr["daily"][shareTaskName][helpUser])
-                            }
-                        }
-                    }
-                    
-                    //微信助力任务
-                    if(wxShareFlag == 1) {
-                        for(let j=0; j<userWxShareTaskList["daily"].length; j++)
-                        {
-                            shareTaskName = userWxShareTaskList["daily"][j]
-                            if(userWxShareCodeArr["daily"][shareTaskName] && userWxShareCodeArr["daily"][shareTaskName][helpUser]) {
-                                await wxShareTaskDone(shareTaskName,userWxShareCodeArr["daily"][shareTaskName][helpUser])
-                            }
-                        }
+            //长牛互助，同一账户只能相互助力3次，默认不跑
+            if(bullHelpFlag == 1) {
+                if(userAppShareCodeArr["bull_invite"][helpUser]&& userAppShareCodeArr["bull_help"][helpUser])
+                {
+                    await bullInvite(userAppShareCodeArr["bull_invite"][helpUser],userAppShareCodeArr["bull_help"][helpUser])
+                }
+            }
+            
+            if(userAppShareCodeArr["guess_invite"][helpUser] && userAppShareCodeArr["guess_ticket"][helpUser] && userAppShareCodeArr["guess_time"][helpUser])
+            {
+                await wxGuessHelp(userAppShareCodeArr["guess_invite"][helpUser],userAppShareCodeArr["guess_ticket"][helpUser],userAppShareCodeArr["guess_time"][helpUser]);
+            }
+            
+            //APP助力任务
+            if(appShareFlag == 1) {
+                for(let j=0; j<userAppShareTaskList["daily"].length; j++)
+                {
+                    shareTaskName = userAppShareTaskList["daily"][j]
+                    if(userAppShareCodeArr["daily"][shareTaskName] && userAppShareCodeArr["daily"][shareTaskName][helpUser]) {
+                        await wxShareTaskDone(shareTaskName,userAppShareCodeArr["daily"][shareTaskName][helpUser])
                     }
                 }
             }
             
-            $.log(`\n======= 账户${nickname[numUser]} 结束助力=======\n`)
+            //微信助力任务
+            if(wxShareFlag == 1) {
+                for(let j=0; j<userWxShareTaskList["daily"].length; j++)
+                {
+                    shareTaskName = userWxShareTaskList["daily"][j]
+                    if(userWxShareCodeArr["daily"][shareTaskName] && userWxShareCodeArr["daily"][shareTaskName][helpUser]) {
+                        await wxShareTaskDone(shareTaskName,userWxShareCodeArr["daily"][shareTaskName][helpUser])
+                    }
+                }
+            }
+            
+            $.log(`\n======= 账户${nickname[numUser]} 结束助力 =======\n`)
         }
+        
         $.log(`\n结束互助任务\n`)
     }
 }
@@ -598,13 +633,13 @@ async function signStatus(actid,signType) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        data = JSON.parse(data);
-                        //console.log(data);
-                        if (data.retcode == 0) {
-                            if(!data.forbidden_code) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if (result.retcode == 0) {
+                            if(!result.forbidden_code) {
                                 if(signType == 0){
-                                    for(let i=0; i<data.task_pkg.tasks.length; i++){
-                                        resultItem = data.task_pkg.tasks[i]
+                                    for(let i=0; i<result.task_pkg.tasks.length; i++){
+                                        resultItem = result.task_pkg.tasks[i]
                                         if(resultItem.date == todayDate){
                                             if(resultItem.status == 0){
                                                 //今天未签到，去签到
@@ -617,17 +652,17 @@ async function signStatus(actid,signType) {
                                         }
                                     }
                                 } else if(signType == 1) {
-                                    $.log(`用户${nickname[numUser]}已连续签到${data.task_pkg.continue_sign_days}天，总签到天数${data.task_pkg.total_sign_days}天\n`);
-                                    if(data.lotto_chance == 1 && data.lotto_ticket) {
+                                    $.log(`用户${nickname[numUser]}已连续签到${result.task_pkg.continue_sign_days}天，总签到天数${result.task_pkg.total_sign_days}天\n`);
+                                    if(result.lotto_chance == 1 && result.lotto_ticket) {
                                         await $.wait(200);
-                                        await sign7daysAward(actid,data.lotto_ticket);
+                                        await sign7daysAward(actid,result.lotto_ticket);
                                     }
                                 }
                             } else {
-                                console.log(`用户${nickname[numUser]}查询签到信息失败，可能已黑号：${data.forbidden_reason}\n`)
+                                console.log(`用户${nickname[numUser]}查询签到信息失败，可能已黑号：${result.forbidden_reason}\n`)
                             }
                         } else {
-                            console.log(`用户${nickname[numUser]}查询签到信息失败：${data.retmsg}`)
+                            console.log(`用户${nickname[numUser]}查询签到信息失败：${result.retmsg}`)
                         }
                     }
                 }
@@ -665,13 +700,13 @@ async function signtask(actid) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        data = JSON.parse(data);
-                        if (data.retcode == 0) {
-                            $.log(`签到获得 ${data.reward_desc}\n`);
+                        let result = JSON.parse(data);
+                        if (result.retcode == 0) {
+                            $.log(`签到获得 ${result.reward_desc}\n`);
                             $.log(`签到时间:${time(rndtime)}\n`);
                             await $.wait(5000); //等待5秒
                         } else {
-                            $.log(`签到失败：${data.retmsg}`)
+                            $.log(`签到失败：${result.retmsg}`)
                         }
                         await signStatus(actid,1)
                     }
@@ -710,11 +745,11 @@ async function sign7daysAward(actid,lotto_ticket) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        data = JSON.parse(data);
-                        if (data.retcode == 0) {
-                            $.log(`获得连续签到奖励： ${data.reward_desc}\n`);
+                        let result = JSON.parse(data);
+                        if (result.retcode == 0) {
+                            $.log(`获得连续签到奖励： ${result.reward_desc}\n`);
                         } else {
-                            $.log(`领取连续签到奖励失败：${data.retmsg}`)
+                            $.log(`领取连续签到奖励失败：${result.retmsg}`)
                         }
                         await $.wait(1000);
                     }
@@ -752,13 +787,13 @@ async function appNewbieAward(actid,ticket) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        let task = JSON.parse(data)
-                        //console.log(task)
-                        if(task.retcode == 0){
-                            $.log(`获得新手任务[actid:${actid}]阶段奖励: ${task.reward_desc}\n`);
+                        let result = JSON.parse(data)
+                        if(logDebug) console.log(result)
+                        if(result.retcode == 0){
+                            $.log(`获得新手任务[actid:${actid}]阶段奖励: ${result.reward_desc}\n`);
                             await $.wait(1000); //等待10秒
                         } else {
-                            $.log(`新手任务[actid:${actid}]阶段未完成：${task.retmsg}\n`);
+                            $.log(`新手任务[actid:${actid}]阶段未完成：${result.retmsg}\n`);
                             await $.wait(100);
                         }
                     }
@@ -797,22 +832,22 @@ async function appTaskListQuery(taskItem,printDebug=0) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        data = JSON.parse(data);
-                        if (data.retcode == 0) {
-                            if(data.task_pkg != null && data.task_pkg.length > 0){
+                        let result = JSON.parse(data);
+                        if (result.retcode == 0) {
+                            if(result.task_pkg != null && result.task_pkg.length > 0){
                                 scanList.push(taskItem.actid)
                                 if(printDebug == 1) {
-                                    //console.log(data)
+                                    if(logDebug) console.log(result)
                                     console.log(`===================== actid=${taskItem.actid} start ======================`)
-                                    for(let i=0; i<data.task_pkg[0].tasks.length; i++){
-                                        resultItem = data.task_pkg[0].tasks[i]
+                                    for(let i=0; i<result.task_pkg[0].tasks.length; i++){
+                                        resultItem = result.task_pkg[0].tasks[i]
                                         console.log(resultItem)
                                     }
                                     console.log(`===================== actid=${taskItem.actid} end ======================`)
                                 }
                             }
                         } else {
-                            //console.log(`${taskItem.taskName}查询失败：${data.retmsg}`)
+                            //console.log(`${taskItem.taskName}查询失败：${result.retmsg}`)
                         }
                     }
                 }
@@ -850,26 +885,26 @@ async function appTaskList(taskItem) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        data = JSON.parse(data);
-                        //console.log(data)
-                        if (data.retcode == 0) {
-                            if(data.task_pkg != null){
-                                let numPkg = data.task_pkg.length
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result)
+                        if (result.retcode == 0) {
+                            if(result.task_pkg != null){
+                                let numPkg = result.task_pkg.length
                                 for(let i=0; i<numPkg; i++){
-                                    //console.log(data.task_pkg[i])
-                                    if(data.task_pkg[i].lotto_ticket) {
+                                    //console.log(result.task_pkg[i])
+                                    if(result.task_pkg[i].lotto_ticket) {
                                         //可领取新手奖励
-                                        await appNewbieAward(taskItem.actid,data.task_pkg[i].lotto_ticket)
+                                        await appNewbieAward(taskItem.actid,result.task_pkg[i].lotto_ticket)
                                         continue
                                     }
-                                    if(data.task_pkg[i].reward_type > 0) {
+                                    if(result.task_pkg[i].reward_type > 0) {
                                         //已领取过新手奖励
                                         continue
                                     }
-                                    if(data.task_pkg[i].tasks && data.task_pkg[i].tasks[0]) {
-                                        let numTask = data.task_pkg[i].tasks.length
+                                    if(result.task_pkg[i].tasks && result.task_pkg[i].tasks[0]) {
+                                        let numTask = result.task_pkg[i].tasks.length
                                         for(let j=0; j<numTask; j++){
-                                            resultItem = data.task_pkg[i].tasks[j]
+                                            resultItem = result.task_pkg[i].tasks[j]
                                             //console.log(resultItem)
                                             task_id = resultItem.id
                                             task_tid = resultItem.tid
@@ -879,7 +914,7 @@ async function appTaskList(taskItem) {
                                 }
                             }
                         } else {
-                            console.log(`${taskItem.taskName}[actid=${actid}]查询失败：${data.retmsg}`)
+                            console.log(`${taskItem.taskName}[actid=${taskItem.actid}]查询失败：${result.retmsg}`)
                         }
                     }
                 }
@@ -918,7 +953,7 @@ async function appTaskStatus(taskItem,task_id,task_tid) {
                 } else {
                     if (safeGet(data)) {
                         let result = JSON.parse(data)
-                        //console.log(result)
+                        if(logDebug) console.log(result)
                         await $.wait(100);
                         if(result.retcode == 0){
                             if(result.done == 0) {
@@ -965,8 +1000,8 @@ async function appTaskticket(taskItem,task_id,task_tid) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        result = JSON.parse(data)
-                        //console.log(result)
+                        let result = JSON.parse(data)
+                        if(logDebug) console.log(result)
                         await $.wait(100);
                         if(result.retcode == 0 && result.task_ticket){
                             await appTaskDone(taskItem,result.task_ticket,task_id,task_tid);
@@ -1008,14 +1043,14 @@ async function appTaskDone(taskItem,ticket,task_id,task_tid) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        let task = JSON.parse(data)
-                        //console.log(task)
+                        let result = JSON.parse(data)
+                        if(logDebug) console.log(result)
                         await $.wait(100);
-                        if(task.retcode == 0){
-                            $.log(`完成${taskItem.taskName}[actid:${taskItem.actid},id:${task_id},tid:${task_tid}]:获得 ${task.reward_desc}\n`);
+                        if(result.retcode == 0){
+                            $.log(`完成${taskItem.taskName}[actid:${taskItem.actid},id:${task_id},tid:${task_tid}]:获得 ${result.reward_desc}\n`);
                             await $.wait(10000); //等待10秒
                         } else {
-                            $.log(`${taskItem.taskName}[actid:${taskItem.actid},id:${task_id},tid:${task_tid}]未完成：${task.retmsg}\n`);
+                            $.log(`${taskItem.taskName}[actid:${taskItem.actid},id:${task_id},tid:${task_tid}]未完成：${result.retmsg}\n`);
                         }
                     }
                 }
@@ -1053,22 +1088,22 @@ async function wxTaskListQuery(taskItem,printDebug=0) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        data = JSON.parse(data);
-                        if (data.retcode == 0) {
-                            if(data.task_pkg != null && data.task_pkg.length > 0){
+                        let result = JSON.parse(data);
+                        if (result.retcode == 0) {
+                            if(result.task_pkg != null && result.task_pkg.length > 0){
                                 scanList.push(taskItem.actid)
                                 if(printDebug == 1) {
-                                    //console.log(data)
+                                    if(logDebug) console.log(result)
                                     console.log(`===================== actid=${taskItem.actid} start ======================`)
-                                    for(let i=0; i<data.task_pkg[0].tasks.length; i++){
-                                        resultItem = data.task_pkg[0].tasks[i]
+                                    for(let i=0; i<result.task_pkg[0].tasks.length; i++){
+                                        resultItem = result.task_pkg[0].tasks[i]
                                         console.log(resultItem)
                                     }
                                     console.log(`===================== actid=${taskItem.actid} end ======================`)
                                 }
                             }
                         } else {
-                            console.log(`${taskItem.taskName}查询失败：${data.retmsg}`)
+                            console.log(`${taskItem.taskName}查询失败：${result.retmsg}`)
                         }
                     }
                 }
@@ -1106,15 +1141,15 @@ async function wxTaskList(taskItem) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        data = JSON.parse(data);
-                        //console.log(data)
-                        if (data.retcode == 0) {
-                            if(data.task_pkg && data.task_pkg[0]){
-                                let numPkg = data.task_pkg.length
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result)
+                        if (result.retcode == 0) {
+                            if(result.task_pkg && result.task_pkg[0]){
+                                let numPkg = result.task_pkg.length
                                 for(let i=0; i<numPkg; i++){
-                                    let numTask = data.task_pkg[i].tasks.length
+                                    let numTask = result.task_pkg[i].tasks.length
                                     for(let j=0; j<numTask; j++){
-                                        resultItem = data.task_pkg[i].tasks[j]
+                                        resultItem = result.task_pkg[i].tasks[j]
                                         //console.log(resultItem)
                                         task_id = resultItem.id
                                         task_tid = resultItem.tid
@@ -1124,7 +1159,7 @@ async function wxTaskList(taskItem) {
                                 }
                             }
                         } else {
-                            console.log(`${taskItem.taskName}查询失败：${data.retmsg}`)
+                            console.log(`${taskItem.taskName}查询失败：${result.retmsg}`)
                         }
                     }
                 }
@@ -1166,7 +1201,7 @@ async function wxTaskStatus(taskItem,task_id,task_tid) {
                 } else {
                     if (safeGet(data)) {
                         let result = JSON.parse(data)
-                        //console.log(result)
+                        if(logDebug) console.log(result)
                         await $.wait(100);
                         if(result.retcode == 0){
                             if(result.done == 0) {
@@ -1216,8 +1251,8 @@ async function wxTaskticket(taskItem,task_id,task_tid) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        result = JSON.parse(data);
-                        //console.log(result)
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result)
                         await $.wait(100);
                         if(result.retcode == 0 && result.task_ticket){
                             await wxTaskDone(taskItem,result.task_ticket,task_id,task_tid);
@@ -1263,14 +1298,14 @@ async function wxTaskDone(taskItem,wxticket,task_id,task_tid) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        let task = JSON.parse(data)
-                        //console.log(task)
+                        let result = JSON.parse(data)
+                        if(logDebug) console.log(result)
                         await $.wait(100);
-                        if(task.retcode == 0){
-                            $.log(`完成${taskItem.taskName}[actid:${taskItem.actid},id:${task_id},tid:${task_tid}]:获得 ${task.reward_desc}\n`);
+                        if(result.retcode == 0){
+                            $.log(`完成${taskItem.taskName}[actid:${taskItem.actid},id:${task_id},tid:${task_tid}]:获得 ${result.reward_desc}\n`);
                             await $.wait(10000); //等待10秒
                         } else {
-                            $.log(`${taskItem.taskName}[actid:${taskItem.actid},id:${task_id},tid:${task_tid}]未完成：${task.retmsg}\n`);
+                            $.log(`${taskItem.taskName}[actid:${taskItem.actid},id:${task_id},tid:${task_tid}]未完成：${result.retmsg}\n`);
                         }
                     }
                 }
@@ -1309,7 +1344,7 @@ async function orderQuery(getName,getCoinNum,isWithdraw,logCoin) {
                 } else {
                     if (safeGet(data)) {
                         let result = JSON.parse(data)
-                        //console.log(result)
+                        if(logDebug) console.log(result)
                         if(result.retcode == 0){
                             if(getName == 1) {
                                 $.log(`获取账户${numUser+1}昵称成功：${result.shop_asset.nickname}\n`);
@@ -1380,7 +1415,7 @@ async function cashTicket(item_id) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        result = JSON.parse(data);
+                        let result = JSON.parse(data);
                         if(result.retcode == 0){
                             await getcash(result.ticket,item_id)
                         } else {
@@ -1422,16 +1457,16 @@ async function getcash(cashticketFb,item_id) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        data = JSON.parse(data);
-                        //console.log(data)
-                        if(data.retcode == 0){
-                            $.log(`提现结果:${data.retmsg}`);
-                            notifyStr += `提现结果:${data.retmsg}\n`
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result)
+                        if(result.retcode == 0){
+                            $.log(`提现结果:${result.retmsg}`);
+                            notifyStr += `提现结果:${result.retmsg}\n`
                             $.log(`查询剩余金额：\n`);
                             await orderQuery(0,0,0,1)
                         } else {
-                            $.log(`提现失败：${data.retmsg}\n`)
-                            notifyStr += `提现失败：${data.retmsg}\n`
+                            $.log(`提现失败：${result.retmsg}\n`)
+                            notifyStr += `提现失败：${result.retmsg}\n`
                         }
                     }
                 }
@@ -1469,12 +1504,12 @@ async function bullTaskDone(taskItem, extra="") {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        result = JSON.parse(data);
-                        //console.log(result)
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result)
                         if(result.retcode == 0) {
                             if(result.forbidden_code > 0) {
                                 $.log(`结束${taskItem.taskName}：${result.forbidden_reason}\n`);
-                                //console.log(result)
+                                if(logDebug) console.log(result)
                             } else if(result.reward_info) {
                                 $.log(`${taskItem.taskName}获得: ${result.reward_info[0].reward_desc}\n`);
                                 await $.wait(Math.random()*2000+7000)
@@ -1544,8 +1579,8 @@ async function bullStatus(getCode) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        result = JSON.parse(data);
-                        //console.log(result)
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result)
                         if(result.retcode == 0) {
                             if(result.forbidden_code) {
                                 $.log(`用户${nickname[numUser]}可能已黑号：${result.forbidden_reason}\n`);
@@ -1557,6 +1592,9 @@ async function bullStatus(getCode) {
                                         userAppShareCodeArr["bull_invite"].push(result.invite_code)
                                         userAppShareCodeArr["bull_help"].push(result.help_code)
                                         $.log(`获取用户${nickname[numUser]}的长牛互助码: invite_code=${result.invite_code}, help_code=${result.help_code}\n`);
+                                    } else {
+                                        userAppShareCodeArr["bull_invite"].push("")
+                                        userAppShareCodeArr["bull_help"].push("")
                                     }
                                 } else {
                                     $.log(`长牛状态：\n`)
@@ -1611,7 +1649,7 @@ async function bullInvite(inviteCode="",helpCode="") {
                 } else {
                     if (safeGet(data)) {
                         let result = JSON.parse(data)
-                        //console.log(result)
+                        if(logDebug) console.log(result)
                         if(result.retcode == 0){
                             await bullHelpReward(inviteCode,helpCode)
                             await $.wait(1000)
@@ -1656,7 +1694,7 @@ async function bullHelpReward(inviteCode="",helpCode="") {
                 } else {
                     if (safeGet(data)) {
                         let result = JSON.parse(data)
-                        //console.log(result)
+                        if(logDebug) console.log(result)
                         if(result.retcode == 0){
                             if(result.forbidden_code > 0){
                                 $.log(`长牛互助获取奖励失败：${result.forbidden_reason}\n`);
@@ -1696,22 +1734,23 @@ async function appShareTaskReq(share_type,task_type) {
         };
         $.get(url, async (err, resp, data) => {
             try {
+                if(!userAppShareCodeArr[task_type][share_type]) {
+                    userAppShareCodeArr[task_type][share_type] = []
+                }
                 if (err) {
                     console.log("腾讯自选股: API查询请求失败 ‼️‼️");
                     console.log(JSON.stringify(err));
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        result = JSON.parse(data);
-                        //console.log(result)
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result)
                         if(result.retcode == 0) {
-                            if(!userAppShareCodeArr[task_type][share_type]) {
-                                userAppShareCodeArr[task_type][share_type] = []
-                            }
                             userAppShareCodeArr[task_type][share_type].push(result.share_code)
                             $.log(`获取用户${nickname[numUser]}的APP的${share_type}互助码: ${result.share_code}\n`);
                         } else {
                             $.log(`获取用户${nickname[numUser]}的APP的${share_type}互助码失败：${result.retmsg}\n`);
+                            userAppShareCodeArr[task_type][share_type].push("")
                         }
                         await $.wait(1000)
                     }
@@ -1747,22 +1786,23 @@ async function wxShareTaskReq(share_type,task_type) {
         };
         $.post(url, async (err, resp, data) => {
             try {
+                if(!userWxShareCodeArr[task_type][share_type]) {
+                    userWxShareCodeArr[task_type][share_type] = []
+                }
                 if (err) {
                     console.log("腾讯自选股: API查询请求失败 ‼️‼️");
                     console.log(JSON.stringify(err));
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        result = JSON.parse(data);
+                        let result = JSON.parse(data);
                         //console.log(data)
                         if(result.retcode == 0) {
-                            if(!userWxShareCodeArr[task_type][share_type]) {
-                                userWxShareCodeArr[task_type][share_type] = []
-                            }
                             userWxShareCodeArr[task_type][share_type].push(result.share_code)
                             $.log(`获取用户${nickname[numUser]}的微信的${share_type}互助码: ${result.share_code}\n`);
                         } else {
                             $.log(`获取用户${nickname[numUser]}的微信的${share_type}互助码失败：${result.retmsg}\n`);
+                            userWxShareCodeArr[task_type][share_type].push("")
                         }
                     }
                 }
@@ -1791,7 +1831,7 @@ async function wxShareTaskDone(share_type,share_code) {
                 'Host': `wzq.tenpay.com`,
                 'Connection': `keep-alive`,
                 'User-Agent': wx_UA,
-                'Referer': `https://wzq.tenpay.com/mp/v2/index.html&__share_flag__=1`,
+                'Referer': `https://wzq.tenpay.com/mp/v2/index.html?stat_data=4001000011&remindtype=&__share_flag__=1`,
                 'Accept-Language': `zh-cn`
             },
         };
@@ -1803,7 +1843,7 @@ async function wxShareTaskDone(share_type,share_code) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        result = JSON.parse(data);
+                        let result = JSON.parse(data);
                         //console.log(data)
                         if(result.retcode == 0) {
                             if(result.share_code_info && result.share_code_info.status == 1) {
@@ -1855,12 +1895,12 @@ async function wxGuessHelp(invite_code="",invite_ticket="",invite_time="") {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        result = JSON.parse(data);
+                        let result = JSON.parse(data);
                         //console.log(data)
                         if(result.retcode == 0) {
-                            $.log(`用户${nickname[numUser]}猜涨跌互助成功\n`);
+                            $.log(`猜涨跌互助成功\n`);
                         } else {
-                            $.log(`用户${nickname[numUser]}猜涨跌互助失败：${result.retmsg}\n`);
+                            $.log(`猜涨跌互助失败：${result.retmsg}\n`);
                         }
                         await $.wait(1000)
                     }
@@ -1902,13 +1942,13 @@ async function appGuessStatus(isGuess) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        result = JSON.parse(data);
-                        //console.log(result)
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result)
                         if(result.retcode == 0) {
                             if(isGuess == 1) {
                                 await $.wait(1000)
                                 if(result.notice_info) {
-                                    //console.log(result)
+                                    if(logDebug) console.log(result)
                                     if(result.notice_info.answer_status == 1) {
                                         $.log(`上期猜涨跌回答正确，正在取得奖励\n`);
                                         await appGuessAward(result.notice_info.date)
@@ -1937,7 +1977,7 @@ async function appGuessStatus(isGuess) {
                                     $.log(`脚本只会在10点到13点之间进行竞猜，当前为非竞猜时段\n`);
                                 }
                             } else {
-                                if(result.invite_info.invite_code && result.invite_info.invite_ticket && result.invite_info.invite_time) {
+                                if(result.invite_info && result.invite_info.invite_code && result.invite_info.invite_ticket && result.invite_info.invite_time) {
                                     userAppShareCodeArr["guess_invite"].push(result.invite_info.invite_code)
                                     userAppShareCodeArr["guess_ticket"].push(result.invite_info.invite_ticket)
                                     userAppShareCodeArr["guess_time"].push(result.invite_info.invite_time)
@@ -1945,6 +1985,9 @@ async function appGuessStatus(isGuess) {
                                     $.log(`获取用户${nickname[numUser]}的猜涨跌票据：${result.invite_info.invite_ticket}\n`);
                                 } else {
                                     $.log(`获取用户${nickname[numUser]}的猜涨跌互助码失败\n`);
+                                    userAppShareCodeArr["guess_invite"].push("")
+                                    userAppShareCodeArr["guess_ticket"].push("")
+                                    userAppShareCodeArr["guess_time"].push("")
                                 }
                             }
                         } else {
@@ -1987,8 +2030,8 @@ async function appGuessAward(guessDate) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        result = JSON.parse(data);
-                        //console.log(result)
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result)
                         if(result.retcode == 0) {
                             $.log(`获得${reward_memo}：${reward_value}金币\n`);
                         } else {
@@ -2030,8 +2073,8 @@ async function appGuessRiseFall(answer,guessDate) {
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
-                        result = JSON.parse(data);
-                        //console.log(result)
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result)
                         if(result.retcode == 0) {
                             guessStr = (answer==1) ? "猜涨" : "猜跌"
                             $.log(`用户${nickname[numUser]}猜涨跌成功：${guessStr}\n`);
@@ -2065,6 +2108,10 @@ function safeGet(data) {
     console.log(`服务器访问数据为空，请检查自身设备网络情况`);
     return false;
   }
+}
+
+function printCaller(){
+    return (new Error()).stack.split("\n")[2].trim().split(" ")[1]
 }
 
 function formatDateTime(inputTime) {
