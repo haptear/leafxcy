@@ -14,9 +14,9 @@
 新手任务可能需要跑几次才能做完，不过每天跑的话总会做完的
 
 提现条件设置：自己新建一个TxStockCash环境变量，0代表不提现，1代表提现1元，5代表提现5元
-分享任务设置：新建一个TxStockHelp环境变量，0代表不做分享互助，1代表做分享互助
 新手任务设置：新建一个TxStockNewbie环境变量，0代表不做新手任务，1代表做新手任务
-
+分享任务设置：新建一个TxStockHelp环境变量，0代表不做分享互助，1代表做分享互助
+互助顺序设置：新建一个TxStockHelpOrder环境变量，按顺序填入要帮助的账号，0代表不帮助其他账户，每个账户之间用@或者#隔开
 
 青龙：
 APP和微信都捉 https://wzq.tenpay.com/cgi-bin/activity_task_daily.fcgi? 开头的包，点击获取金币，看到任务应该就能捉到
@@ -50,12 +50,16 @@ const jsname = '腾讯自选股'
 const $ = Env(jsname)
 const notifyFlag = 1; //0为关闭通知，1为打开通知,默认为1
 
+const notify = $.isNode() ? require('./sendNotify') : '';
+
 let sessionTime = Math.round(new Date().getTime())
 let rndtime = "" //毫秒
 let todayDate = formatDateTime(new Date());
+
 var cash = ($.isNode() ? (process.env.TxStockCash) : ($.getval('TxStockCash'))) || 5; //0为不自动提现,1为自动提现1元,5为自动提现5元
 var help = ($.isNode() ? (process.env.TxStockHelp) : ($.getval('TxStockHelp'))) || 1; //0为不做分享助力任务，1为多账户互相分享助力
 var newbie = ($.isNode() ? (process.env.TxStockNewbie) : ($.getval('TxStockNewbie'))) || 0; //0为不做新手任务，1为自动做新手任务
+var helpOrder = ($.isNode() ? (process.env.TxStockHelpOrder) : ($.getval('TxStockHelpOrder'))) || "";
 
 const appUrlArr = [];
 let appUrlArrVal = "";
@@ -87,10 +91,14 @@ let wxTaskFlag = 1
 let bullishFlag = 1
 let bullHelpFlag = 0
 
+//多账号情况下，可以控制每个账号帮助第几个账户，默认帮助上一个
+let helpOrderArr = []
+
 let logDebug = 0
+let TEST_PRINT = 0
 
 let userAppShareTaskList = {
-    "daily": ["news_share", "task_50_1111", "task_51_1111", "task_72_1113", "task_74_1113", ],
+    "daily": ["news_share", "task_50_1111", "task_51_1111"/*, "task_72_1113", "task_74_1113"*/, ],
     "newbie": [],
     
 }
@@ -182,9 +190,7 @@ var TxStockWxHeader
             
             coinInfo = ""
             
-            //扫描可查询的任务列表,
-            //await scanAppTaskList(1000,1400,"task_daily","routine",0)
-            //await scanWxTaskList(1000,1400,"task_daily","routine",0) //每个大概花费86ms
+            //await testFunction() //测试用，勿打开
             
             await appGuessStatus(1); //猜涨跌
             await $.wait(1000)
@@ -209,8 +215,15 @@ var TxStockWxHeader
 .catch((e) => $.logErr(e))
 .finally(() => $.done())
 
+//测试用
+async function testFunction() {
+    //扫描可查询的任务列表,
+    await scanAppTaskList(1000,2000,"task_daily","routine")
+    //await scanWxTaskList(1000,1400,"task_daily","routine") //每个大概花费86ms
+}
+
 //通知
-function showmsg() {
+async function showmsg() {
     
     notifyBody = jsname + "运行通知\n\n" + notifyStr
     
@@ -220,6 +233,7 @@ function showmsg() {
 
     if (notifyFlag == 1) {
         $.msg(notifyBody);
+        if ($.isNode()){await notify.sendNotify($.name, notifyBody );}
     }
 }
 
@@ -316,6 +330,23 @@ async function checkEnv()
         }
     })
     
+    if(helpOrder) {
+        if (helpOrder.indexOf('#') > -1) {
+            helpOrderArrs = helpOrder.split('#');
+            console.log(`您选择的是用"#"隔开TxStockHelpOrder\n`)
+        } else if (helpOrder.indexOf('@') > -1) {
+            helpOrderArrs = helpOrder.split('@');
+            console.log(`您选择的是用"@"隔开TxStockHelpOrder\n`)
+        } else {
+            helpOrderArrs = [helpOrder]
+        };
+        Object.keys(helpOrderArrs).forEach((item) => {
+            if (helpOrderArrs[item]) {
+                helpOrderArr.push(helpOrderArrs[item])
+            }
+        })
+    }
+    
     totalUser = appUrlArr.length
     shareFlag = (help && totalUser > 1)
     $.log(`共找到${totalUser}个账号\n`)
@@ -337,25 +368,42 @@ async function getEnvParam(userNum)
     app_osVer = appUrlArrVal.match(/&_osVer=([\w\.,-]+)/)[1]
     app_devId = appUrlArrVal.match(/&_devId=([\w-]+)/)[1]
     
+    app_ck = ""
+    app_UA = ""
+    Object.keys(appHeaderArrVal).forEach((item) => {
+        if(item.toLowerCase() == "cookie") {
+            app_ck = appHeaderArrVal[item]
+        } else if(item.toLowerCase() == "user-agent") {
+            app_UA = appHeaderArrVal[item]
+        }
+    })
     app_ck = appHeaderArrVal["Cookie"]
     app_UA = appHeaderArrVal["User-Agent"]
     
-    wx_UA = wxHeaderArrVal["User-Agent"]
+    wx_ck_tmp = ""
+    wx_UA = ""
+    Object.keys(wxHeaderArrVal).forEach((item) => {
+        if(item.toLowerCase() == "cookie") {
+            wx_ck_tmp = wxHeaderArrVal[item]
+        } else if(item.toLowerCase() == "user-agent") {
+            wx_UA = wxHeaderArrVal[item]
+        }
+    })
     
-    pgv_info = wxHeaderArrVal["Cookie"].match(/pgv_info=([\w=]+)/)[1]
-    pgv_pvid = wxHeaderArrVal["Cookie"].match(/pgv_pvid=([\w]+)/)[1]
-    ts_last = wxHeaderArrVal["Cookie"].match(/ts_last=([\w\/]+)/)[1]
-    ts_refer = wxHeaderArrVal["Cookie"].match(/ts_refer=([\w\/\.]+)/)[1]
-    ts_sid = wxHeaderArrVal["Cookie"].match(/ts_sid=([\w]+)/)[1]
-    ts_uid = wxHeaderArrVal["Cookie"].match(/ts_uid=([\w]+)/)[1]
-    qlappid = wxHeaderArrVal["Cookie"].match(/qlappid=([\w]+)/)[1]
-    qlskey = wxHeaderArrVal["Cookie"].match(/qlskey=([\w]+)/)[1]
-    qluin = wxHeaderArrVal["Cookie"].match(/qluin=([\w@\.]+)/)[1]
-    qq_logtype = wxHeaderArrVal["Cookie"].match(/qq_logtype=([\w]+)/)[1]
-    wzq_qlappid = wxHeaderArrVal["Cookie"].match(/wzq_qlappid=([\w]+)/)[1]
-    wzq_qlskey = wxHeaderArrVal["Cookie"].match(/wzq_qlskey=([\w]+)/)[1]
-    wzq_qluin = wxHeaderArrVal["Cookie"].match(/wzq_qluin=([\w-]+)/)[1]
-    zxg_openid = wxHeaderArrVal["Cookie"].match(/zxg_openid=([\w-]+)/)[1]
+    pgv_info = wx_ck_tmp.match(/pgv_info=([\w=]+)/)[1]
+    pgv_pvid = wx_ck_tmp.match(/pgv_pvid=([\w]+)/)[1]
+    ts_last = wx_ck_tmp.match(/ts_last=([\w\/]+)/)[1]
+    ts_refer = wx_ck_tmp.match(/ts_refer=([\w\/\.]+)/)[1]
+    ts_sid = wx_ck_tmp.match(/ts_sid=([\w]+)/)[1]
+    ts_uid = wx_ck_tmp.match(/ts_uid=([\w]+)/)[1]
+    qlappid = wx_ck_tmp.match(/qlappid=([\w]+)/)[1]
+    qlskey = wx_ck_tmp.match(/qlskey=([\w]+)/)[1]
+    qluin = wx_ck_tmp.match(/qluin=([\w@\.]+)/)[1]
+    qq_logtype = wx_ck_tmp.match(/qq_logtype=([\w]+)/)[1]
+    wzq_qlappid = wx_ck_tmp.match(/wzq_qlappid=([\w]+)/)[1]
+    wzq_qlskey = wx_ck_tmp.match(/wzq_qlskey=([\w]+)/)[1]
+    wzq_qluin = wx_ck_tmp.match(/wzq_qluin=([\w-]+)/)[1]
+    zxg_openid = wx_ck_tmp.match(/zxg_openid=([\w-]+)/)[1]
     
     //wx_ck = `pgv_info=${pgv_info}; pgv_pvid=${pgv_pvid}; ts_last=${ts_last}; ts_refer=${ts_refer}; ts_sid=${ts_sid}; ts_uid=${ts_uid}; qlappid=${qlappid}; qlskey=${qlskey}; qluin=${qluin}; qq_logtype=${qq_logtype}; wx_session_time=${sessionTime}; wzq_qlappid=${wzq_qlappid}; wzq_qlskey=${wzq_qlskey}; wzq_qluin=${wzq_qluin}; zxg_openid=${zxg_openid}`
     
@@ -523,46 +571,52 @@ async function shareTask()
             await getEnvParam(numUser)
             
             //循环帮助
-            //helpUser = ((numUser+1) == totalUser) ?  0 : (numUser+1)
-            helpUser = ((numUser-1) <0) ?  (totalUser-1) : (numUser-1)
-            $.log(`\n======= 账户${nickname[numUser]} 开始帮助 账户${nickname[helpUser]} =======\n`)
-                    
-            //长牛互助，同一账户只能相互助力3次，默认不跑
-            if(bullHelpFlag == 1) {
-                if(userAppShareCodeArr["bull_invite"][helpUser]&& userAppShareCodeArr["bull_help"][helpUser])
-                {
-                    await bullInvite(userAppShareCodeArr["bull_invite"][helpUser],userAppShareCodeArr["bull_help"][helpUser])
-                }
+            if(helpOrderArr[numUser] || helpOrderArr[numUser] == 0) {
+                helpUser = helpOrderArr[numUser] - 1
+            } else {
+                helpUser = ((numUser-1) <0) ?  (totalUser-1) : (numUser-1)
             }
             
-            if(userAppShareCodeArr["guess_invite"][helpUser] && userAppShareCodeArr["guess_ticket"][helpUser] && userAppShareCodeArr["guess_time"][helpUser])
-            {
-                await wxGuessHelp(userAppShareCodeArr["guess_invite"][helpUser],userAppShareCodeArr["guess_ticket"][helpUser],userAppShareCodeArr["guess_time"][helpUser]);
-            }
-            
-            //APP助力任务
-            if(appShareFlag == 1) {
-                for(let j=0; j<userAppShareTaskList["daily"].length; j++)
-                {
-                    shareTaskName = userAppShareTaskList["daily"][j]
-                    if(userAppShareCodeArr["daily"][shareTaskName] && userAppShareCodeArr["daily"][shareTaskName][helpUser]) {
-                        await wxShareTaskDone(shareTaskName,userAppShareCodeArr["daily"][shareTaskName][helpUser])
+            if(helpUser >= 0) {
+                $.log(`\n======= 账户${numUser+1} ${nickname[numUser]} 开始帮助 账户${helpUser+1} ${nickname[helpUser]} =======\n`)
+                        
+                //长牛互助，同一账户只能相互助力3次，默认不跑
+                if(bullHelpFlag == 1) {
+                    if(userAppShareCodeArr["bull_invite"][helpUser]&& userAppShareCodeArr["bull_help"][helpUser])
+                    {
+                        await bullInvite(userAppShareCodeArr["bull_invite"][helpUser],userAppShareCodeArr["bull_help"][helpUser])
                     }
                 }
-            }
-            
-            //微信助力任务
-            if(wxShareFlag == 1) {
-                for(let j=0; j<userWxShareTaskList["daily"].length; j++)
+                
+                if(userAppShareCodeArr["guess_invite"][helpUser] && userAppShareCodeArr["guess_ticket"][helpUser] && userAppShareCodeArr["guess_time"][helpUser])
                 {
-                    shareTaskName = userWxShareTaskList["daily"][j]
-                    if(userWxShareCodeArr["daily"][shareTaskName] && userWxShareCodeArr["daily"][shareTaskName][helpUser]) {
-                        await wxShareTaskDone(shareTaskName,userWxShareCodeArr["daily"][shareTaskName][helpUser])
+                    await wxGuessHelp(userAppShareCodeArr["guess_invite"][helpUser],userAppShareCodeArr["guess_ticket"][helpUser],userAppShareCodeArr["guess_time"][helpUser]);
+                }
+                
+                //APP助力任务
+                if(appShareFlag == 1) {
+                    for(let j=0; j<userAppShareTaskList["daily"].length; j++)
+                    {
+                        shareTaskName = userAppShareTaskList["daily"][j]
+                        if(userAppShareCodeArr["daily"][shareTaskName] && userAppShareCodeArr["daily"][shareTaskName][helpUser]) {
+                            await wxShareTaskDone(shareTaskName,userAppShareCodeArr["daily"][shareTaskName][helpUser])
+                        }
                     }
                 }
+                
+                //微信助力任务
+                if(wxShareFlag == 1) {
+                    for(let j=0; j<userWxShareTaskList["daily"].length; j++)
+                    {
+                        shareTaskName = userWxShareTaskList["daily"][j]
+                        if(userWxShareCodeArr["daily"][shareTaskName] && userWxShareCodeArr["daily"][shareTaskName][helpUser]) {
+                            await wxShareTaskDone(shareTaskName,userWxShareCodeArr["daily"][shareTaskName][helpUser])
+                        }
+                    }
+                }
+                
+                $.log(`\n======= 账户${nickname[numUser]} 结束助力 =======\n`)
             }
-            
-            $.log(`\n======= 账户${nickname[numUser]} 结束助力 =======\n`)
         }
         
         $.log(`\n结束互助任务\n`)
@@ -583,11 +637,11 @@ async function todayIncome()
 }
 
 //扫描可查询的APP任务列表
-async function scanAppTaskList(actidStart,actidEnd,activity,type,debugPrint) {
+async function scanAppTaskList(actidStart,actidEnd,activity,type) {
     console.log(`开始查询APP任务列表, activity=${activity}, type=${type}, from ${actidStart} to ${actidEnd}`)
     for(let i=actidStart; i<actidEnd; i++){
         titem = {"taskName":`扫描任务${i}`,"activity":activity,"type":type,"actid":i}
-        await appTaskListQuery(titem,debugPrint);
+        await appTaskListQuery(titem);
         await $.wait(100)
     }
     console.log(`查询结束，得到列表：`)
@@ -595,11 +649,11 @@ async function scanAppTaskList(actidStart,actidEnd,activity,type,debugPrint) {
 }
 
 //扫描可查询的微信任务列表
-async function scanWxTaskList(actidStart,actidEnd,activity,type,debugPrint) {
+async function scanWxTaskList(actidStart,actidEnd,activity,type) {
     console.log(`开始查询微信任务列表, activity=${activity}, type=${type}, from ${actidStart} to ${actidEnd}`)
     for(let i=actidStart; i<actidEnd; i++){
         titem = {"taskName":`扫描任务${i}`,"activity":activity,"type":type,"actid":i}
-        await wxTaskListQuery(titem,debugPrint);
+        await wxTaskListQuery(titem);
         await $.wait(20)
     }
     console.log(`查询结束，得到列表：`)
@@ -808,7 +862,7 @@ async function appNewbieAward(actid,ticket) {
 }
 
 //APP任务列表查询
-async function appTaskListQuery(taskItem,printDebug=0) {
+async function appTaskListQuery(taskItem) {
     rndtime = Math.round(new Date().getTime())
     return new Promise((resolve) => {
         let url = {
@@ -834,16 +888,15 @@ async function appTaskListQuery(taskItem,printDebug=0) {
                     if (safeGet(data)) {
                         let result = JSON.parse(data);
                         if (result.retcode == 0) {
-                            if(result.task_pkg != null && result.task_pkg.length > 0){
+                            if(result.task_pkg && result.task_pkg.length > 0){
                                 scanList.push(taskItem.actid)
-                                if(printDebug == 1) {
+                                if(TEST_PRINT == 1) {
                                     if(logDebug) console.log(result)
                                     console.log(`===================== actid=${taskItem.actid} start ======================`)
                                     for(let i=0; i<result.task_pkg[0].tasks.length; i++){
                                         resultItem = result.task_pkg[0].tasks[i]
                                         console.log(resultItem)
                                     }
-                                    console.log(`===================== actid=${taskItem.actid} end ======================`)
                                 }
                             }
                         } else {
@@ -1064,7 +1117,7 @@ async function appTaskDone(taskItem,ticket,task_id,task_tid) {
 }
 
 //微信任务列表查询
-async function wxTaskListQuery(taskItem,printDebug=0) {
+async function wxTaskListQuery(taskItem) {
     rndtime = Math.round(new Date().getTime())
     return new Promise((resolve) => {
         let url = {
@@ -1090,16 +1143,15 @@ async function wxTaskListQuery(taskItem,printDebug=0) {
                     if (safeGet(data)) {
                         let result = JSON.parse(data);
                         if (result.retcode == 0) {
-                            if(result.task_pkg != null && result.task_pkg.length > 0){
+                            if(result.task_pkg && result.task_pkg.length > 0){
                                 scanList.push(taskItem.actid)
-                                if(printDebug == 1) {
+                                if(TEST_PRINT == 1) {
                                     if(logDebug) console.log(result)
                                     console.log(`===================== actid=${taskItem.actid} start ======================`)
                                     for(let i=0; i<result.task_pkg[0].tasks.length; i++){
                                         resultItem = result.task_pkg[0].tasks[i]
                                         console.log(resultItem)
                                     }
-                                    console.log(`===================== actid=${taskItem.actid} end ======================`)
                                 }
                             }
                         } else {
