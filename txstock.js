@@ -2,13 +2,13 @@
 腾讯自选股APP & 微信微证券公众号
 改自@CenBoMin大佬的脚本
 只适配了IOS，测试了青龙和V2P，其他平台请自行测试，安卓请自行测试
-多账户用#隔开
+多用户用#隔开
 
 脚本只会在10点到13点之间进行猜涨跌，请务必在这段时间内跑一次脚本，猜涨跌开奖时间为15:15
 有些任务会提示任务完成发奖失败 -- 可以忽略
-或者任务完成前置条件不符合 -- 待解决
+或者任务完成前置条件不符合 -- 一般为需要分享，会在完成日常任务后尝试做互助
 
-内置了多账户相互做分享任务，账户数多于一个才能用
+内置了多用户相互做分享任务，用户数多于一个才能用
 测试了做分享任务的情况下，一天收益大概在15000金币
 默认自动提现5元，做分享任务，不做新手任务
 新手任务可能需要跑几次才能做完，不过每天跑的话总会做完的
@@ -16,7 +16,7 @@
 提现条件设置：自己新建一个TxStockCash环境变量，0代表不提现，1代表提现1元，5代表提现5元
 新手任务设置：新建一个TxStockNewbie环境变量，0代表不做新手任务，1代表做新手任务
 分享任务设置：新建一个TxStockHelp环境变量，0代表不做分享互助，1代表做分享互助
-互助顺序设置：新建一个TxStockHelpOrder环境变量，按顺序填入要帮助的账号，0代表不帮助其他账户，每个账户之间用@或者#隔开
+互助顺序设置：新建一个TxStockHelpOrder环境变量，按顺序填入要帮助的用户，0代表不帮助其他用户，每个用户之间用@或者#隔开
 
 青龙：
 APP和微信都捉 https://wzq.tenpay.com/cgi-bin/activity_task_daily.fcgi? 开头的包，点击获取金币，看到任务应该就能捉到
@@ -57,7 +57,7 @@ let rndtime = "" //毫秒
 let todayDate = formatDateTime(new Date());
 
 var cash = ($.isNode() ? (process.env.TxStockCash) : ($.getval('TxStockCash'))) || 5; //0为不自动提现,1为自动提现1元,5为自动提现5元
-var help = ($.isNode() ? (process.env.TxStockHelp) : ($.getval('TxStockHelp'))) || 1; //0为不做分享助力任务，1为多账户互相分享助力
+var help = ($.isNode() ? (process.env.TxStockHelp) : ($.getval('TxStockHelp'))) || 1; //0为不做分享助力任务，1为多用户互相分享助力
 var newbie = ($.isNode() ? (process.env.TxStockNewbie) : ($.getval('TxStockNewbie'))) || 0; //0为不做新手任务，1为自动做新手任务
 var helpOrder = ($.isNode() ? (process.env.TxStockHelpOrder) : ($.getval('TxStockHelpOrder'))) || "";
 
@@ -78,11 +78,11 @@ let notifyStr = ""
 
 let numUser = 0
 let totalUser = 0
-let shareFlag = 0 //账号数多于1且打开助力开关，才会做助力任务
+let shareFlag = 0 //用户数多于1且打开助力开关，才会做助力任务
 let helpUser = 0
 let scanList = []
 let nickname = []
-let bullStatusFlag = []
+let bullStatusFlag = 0
 
 let appShareFlag = 1
 let wxShareFlag = 1
@@ -91,7 +91,7 @@ let wxTaskFlag = 1
 let bullishFlag = 1
 let bullHelpFlag = 0
 
-//多账号情况下，可以控制每个账号帮助第几个账户，默认帮助上一个
+//多用户情况下，可以控制每个用户帮助第几个用户，默认帮助上一个
 let helpOrderArr = []
 
 let logDebug = 0
@@ -124,7 +124,7 @@ let userWxShareCodeArr = {
 //APP任务
 let appActidArray = {
     "daily": [1101, 1103, 1104, 1105, 1109, 1111, 1112, 1113],
-    "newbie": [1033, ],
+    "newbie": [1023, 1033, ],
 }
 let appTaskArray = {
     "daily": [],
@@ -173,39 +173,41 @@ var TxStockWxHeader
         //初始化任务列表
         await initTaskList()
         
-        //获取账户信息
+        //获取用户信息
         await initAccountInfo()
         
         //新手任务
         await newbieTask()
         
-        //获取互助码和相互助力
-        await shareTask()
-        
         for (numUser = 0; numUser < totalUser; numUser++)
         {
             await getEnvParam(numUser)
             
-            $.log(`\n======= 开始腾讯自选股账号 ${numUser+1} =======\n`)
-            
-            coinInfo = ""
+            $.log(`\n======= 开始腾讯自选股用户${numUser+1} ${nickname[numUser]} 日常任务 =======\n`)
             
             //await testFunction() //测试用，勿打开
             
-            await appGuessStatus(1); //猜涨跌
+            await signStatus(2002,0); //签到
+            await $.wait(1000)
+            
+            await appGuessStatus(); //猜涨跌和获取互助码
             await $.wait(1000)
             
             await dailyTask() //日常任务
             await $.wait(1000)
             
-            await bullTask() //长牛任务
+            await queryShareCode() //获取日常任务互助码
             await $.wait(1000)
             
-            await todayIncome()//收益查询，提现
+            await bullTask() //长牛任务和获取互助码
             await $.wait(1000)
             
-            $.log(`\n======= 结束腾讯自选股账号 ${numUser+1} 任务 =======\n`)
+            $.log(`\n======= 结束腾讯自选股用户${numUser+1} ${nickname[numUser]} 日常任务 =======\n`)
         }
+        
+        await shareTask() //助力任务
+        
+        await todayIncome()//收益查询，提现
         
         await showmsg()
     }
@@ -349,7 +351,7 @@ async function checkEnv()
     
     totalUser = appUrlArr.length
     shareFlag = (help && totalUser > 1)
-    $.log(`共找到${totalUser}个账号\n`)
+    $.log(`共找到${totalUser}个用户\n`)
     
     return true
 }
@@ -416,15 +418,9 @@ async function initAccountInfo()
     {
         await getEnvParam(numUser)
         
+        coinInfo = ""
         await orderQuery(1,1,0,0); //获取用户名
         coinStart.push(coinInfo)
-        await $.wait(500)
-        
-        await signStatus(2002,0); //签到
-        await $.wait(1000)
-        
-        //获取长牛互助码，同时检查长牛是否黑号
-        await bullStatus(1)
         await $.wait(500)
     }
 }
@@ -457,16 +453,18 @@ async function initTaskList()
 
 async function bullTask() 
 {
-    if(bullishFlag == 1 && bullStatusFlag[numUser] == 1) {
-        await bullTaskDone(bullTaskArray["rock_bullish"])
-        for(let i=0; i<10; i++){
-            await bullTaskDone(bullTaskArray["open_box"])
-            await $.wait(5000)
+    if(bullishFlag == 1) {
+        await bullStatus()
+        if(bullStatusFlag) {
+            await bullTaskDone(bullTaskArray["rock_bullish"])
+            for(let i=0; i<10; i++){
+                await bullTaskDone(bullTaskArray["open_box"])
+                await $.wait(5000)
+            }
+            await bullTaskDone(bullTaskArray["open_blindbox"])
+            await bullTaskDone(bullTaskArray["query_blindbox"])
+            await bullTaskDone(bullTaskArray["feed"])
         }
-        await bullTaskDone(bullTaskArray["open_blindbox"])
-        await bullTaskDone(bullTaskArray["query_blindbox"])
-        
-        await bullStatus(0)
     }
 }
 
@@ -492,11 +490,12 @@ async function dailyTask()
 async function newbieTask() 
 {
     if(newbie == 1) {
-        $.log(`\开始做新手任务：\n`)
+        $.log(`\================= 开始新手任务 =================\n`)
         for (numUser = 0; numUser < totalUser; numUser++)
         {
             await getEnvParam(numUser)
             
+            $.log(`\开始用户 ${nickname[numUser]} 新手任务：\n`)
             for(let j=0; j<userAppShareTaskList["newbie"].length; j++)
             {
                 await appShareTaskReq(userAppShareTaskList["newbie"][j],"newbie")
@@ -511,6 +510,7 @@ async function newbieTask()
         for (numUser = 0; numUser < totalUser; numUser++)
         {
             await getEnvParam(numUser)
+            await getHelpUser()
             
             for(let j=0; j<userAppShareTaskList["newbie"].length; j++)
             {
@@ -538,49 +538,54 @@ async function newbieTask()
                 await appTaskList(appTaskArray["newbie"][i]);
             }
         }
+        $.log(`\================= 结束新手任务 =================\n`)
+    }
+}
+
+async function queryShareCode() 
+{
+    if(shareFlag == 1) {
+        $.log(`\n开始获取用户 ${nickname[numUser]} 日常任务互助码：\n`)
+        
+        if(appShareFlag == 1) {
+            for(let j=0; j<userAppShareTaskList["daily"].length; j++)
+            {
+                await appShareTaskReq(userAppShareTaskList["daily"][j],"daily")
+            }
+        }
+        
+        if(wxShareFlag == 1) {
+            for(let j=0; j<userWxShareTaskList["daily"].length; j++)
+            {
+                await wxShareTaskReq(userWxShareTaskList["daily"][j],"daily")
+            }
+        }
+    }
+}
+
+async function getHelpUser()
+{
+    if(helpOrderArr[numUser] || helpOrderArr[numUser] == 0) {
+        helpUser = helpOrderArr[numUser] - 1
+    } else {
+        //循环帮助
+        helpUser = ((numUser-1) <0) ?  (totalUser-1) : (numUser-1)
     }
 }
 
 async function shareTask() 
 {
     if(shareFlag == 1) {
-        $.log(`\n开始获取互助码：\n`)
+        $.log(`\n================= 开始分享任务 =================\n`)
         for (numUser = 0; numUser < totalUser; numUser++)
         {
             await getEnvParam(numUser)
-            
-            await appGuessStatus(0);
-            
-            if(appShareFlag == 1) {
-                for(let j=0; j<userAppShareTaskList["daily"].length; j++)
-                {
-                    await appShareTaskReq(userAppShareTaskList["daily"][j],"daily")
-                }
-            }
-            
-            if(wxShareFlag == 1) {
-                for(let j=0; j<userWxShareTaskList["daily"].length; j++)
-                {
-                    await wxShareTaskReq(userWxShareTaskList["daily"][j],"daily")
-                }
-            }
-        }
-        
-        for (numUser = 0; numUser < totalUser; numUser++)
-        {
-            await getEnvParam(numUser)
-            
-            //循环帮助
-            if(helpOrderArr[numUser] || helpOrderArr[numUser] == 0) {
-                helpUser = helpOrderArr[numUser] - 1
-            } else {
-                helpUser = ((numUser-1) <0) ?  (totalUser-1) : (numUser-1)
-            }
+            await getHelpUser()
             
             if(helpUser >= 0) {
-                $.log(`\n======= 账户${numUser+1} ${nickname[numUser]} 开始帮助 账户${helpUser+1} ${nickname[helpUser]} =======\n`)
+                $.log(`\n======= 用户${numUser+1} ${nickname[numUser]} 开始帮助 用户${helpUser+1} ${nickname[helpUser]} =======\n`)
                         
-                //长牛互助，同一账户只能相互助力3次，默认不跑
+                //长牛互助，同一用户只能相互助力3次，默认不跑
                 if(bullHelpFlag == 1) {
                     if(userAppShareCodeArr["bull_invite"][helpUser]&& userAppShareCodeArr["bull_help"][helpUser])
                     {
@@ -588,6 +593,7 @@ async function shareTask()
                     }
                 }
                 
+                //猜涨跌分享
                 if(userAppShareCodeArr["guess_invite"][helpUser] && userAppShareCodeArr["guess_ticket"][helpUser] && userAppShareCodeArr["guess_time"][helpUser])
                 {
                     await wxGuessHelp(userAppShareCodeArr["guess_invite"][helpUser],userAppShareCodeArr["guess_ticket"][helpUser],userAppShareCodeArr["guess_time"][helpUser]);
@@ -615,24 +621,31 @@ async function shareTask()
                     }
                 }
                 
-                $.log(`\n======= 账户${nickname[numUser]} 结束助力 =======\n`)
+                $.log(`\n======= 用户 ${nickname[numUser]} 结束助力 =======\n`)
             }
         }
-        
-        $.log(`\n结束互助任务\n`)
+        $.log(`\n================= 结束分享任务 =================\n`)
     }
 }
 
 async function todayIncome()
 {
-    await orderQuery(0,1,1,1)
-    coinEnd.push(coinInfo)
-    
-    if(coinEnd[numUser] && coinStart[numUser])
+    for (numUser = 0; numUser < totalUser; numUser++)
     {
-        rewardCoin = coinEnd[numUser] - coinStart[numUser];
-        $.log(`账号：${nickname[numUser]}，本次运行获得${rewardCoin}金币\n\n`)
-        notifyStr += `账号：${nickname[numUser]}，本次运行获得${rewardCoin}金币\n\n`
+        await getEnvParam(numUser)
+        
+        coinInfo = ""
+        await orderQuery(0,1,1,1)
+        coinEnd.push(coinInfo)
+        
+        if(coinEnd[numUser] && coinStart[numUser])
+        {
+            rewardCoin = coinEnd[numUser] - coinStart[numUser];
+            $.log(`用户：${nickname[numUser]}，本次运行获得${rewardCoin}金币\n\n`)
+            notifyStr += `用户：${nickname[numUser]}，本次运行获得${rewardCoin}金币\n\n`
+        }
+        
+        await $.wait(200)
     }
 }
 
@@ -701,22 +714,22 @@ async function signStatus(actid,signType) {
                                                 await signtask(actid);
                                             } else {
                                                 //今天已签到
-                                                $.log(`用户${nickname[numUser]}今天已签到\n`);
+                                                $.log(`用户 ${nickname[numUser]} 今天已签到\n`);
                                             }
                                         }
                                     }
                                 } else if(signType == 1) {
-                                    $.log(`用户${nickname[numUser]}已连续签到${result.task_pkg.continue_sign_days}天，总签到天数${result.task_pkg.total_sign_days}天\n`);
+                                    $.log(`用户 ${nickname[numUser]} 已连续签到${result.task_pkg.continue_sign_days}天，总签到天数${result.task_pkg.total_sign_days}天\n`);
                                     if(result.lotto_chance == 1 && result.lotto_ticket) {
                                         await $.wait(200);
                                         await sign7daysAward(actid,result.lotto_ticket);
                                     }
                                 }
                             } else {
-                                console.log(`用户${nickname[numUser]}查询签到信息失败，可能已黑号：${result.forbidden_reason}\n`)
+                                console.log(`用户 ${nickname[numUser]} 查询签到信息失败，可能已黑号：${result.forbidden_reason}\n`)
                             }
                         } else {
-                            console.log(`用户${nickname[numUser]}查询签到信息失败：${result.retmsg}`)
+                            console.log(`用户 ${nickname[numUser]} 查询签到信息失败：${result.retmsg}`)
                         }
                     }
                 }
@@ -1399,15 +1412,15 @@ async function orderQuery(getName,getCoinNum,isWithdraw,logCoin) {
                         if(logDebug) console.log(result)
                         if(result.retcode == 0){
                             if(getName == 1) {
-                                $.log(`获取账户${numUser+1}昵称成功：${result.shop_asset.nickname}\n`);
+                                $.log(`获取用户${numUser+1}昵称成功：${result.shop_asset.nickname}\n`);
                                 nickname.push(result.shop_asset.nickname)
                             }
                             if(getCoinNum == 1) {
                                 coinInfo = result.shop_asset.amount
                             }
-                            $.log(`账户${nickname[numUser]}金币余额: ${result.shop_asset.amount}\n`);
+                            $.log(`用户 ${nickname[numUser]} 金币余额: ${result.shop_asset.amount}\n`);
                             if(logCoin) {
-                                notifyStr += `账户${nickname[numUser]}金币余额: ${result.shop_asset.amount}\n`
+                                notifyStr += `用户 ${nickname[numUser]} 金币余额: ${result.shop_asset.amount}\n`
                             }
                             if(cash != 0 && isWithdraw == 1) {
                                 if(result.cash != null && result.cash.length > 0){
@@ -1417,12 +1430,12 @@ async function orderQuery(getName,getCoinNum,isWithdraw,logCoin) {
                                         //console.log(cashItem)
                                         if(cashItem.item_desc == cashStr){
                                             $.log(`提现${cashItem.item_desc}，需要${cashItem.coins}金币\n`);
-                                            if(coinInfo-cashItem.coins >= 0){
-                                                $.log(`账户${nickname[numUser]}金币余额多于${cashItem.coins}，开始提现${cashStr}\n`);
-                                                notifyStr += `账户${nickname[numUser]}金币余额多于${cashItem.coins}，开始提现${cashStr}\n`
+                                            if(result.shop_asset.amount-cashItem.coins >= 0){
+                                                $.log(`用户 ${nickname[numUser]} 金币余额多于${cashItem.coins}，开始提现${cashStr}\n`);
+                                                notifyStr += `用户 ${nickname[numUser]} 金币余额多于${cashItem.coins}，开始提现${cashStr}\n`
                                                 await cashTicket(cashItem.item_id)
                                             } else {
-                                                $.log(`账户${nickname[numUser]}金币余额不足，不进行提现\n`);
+                                                $.log(`用户 ${nickname[numUser]} 金币余额不足，不进行提现\n`);
                                             }
                                         }
                                     }
@@ -1607,7 +1620,8 @@ async function bullTaskDone(taskItem, extra="") {
 }
 
 //APP长牛状态+获取互助码
-async function bullStatus(getCode) {
+async function bullStatus() {
+    bullStatusFlag = 0
     rndtime = Math.round(new Date().getTime())
     return new Promise((resolve) => {
         let signurl = {
@@ -1635,33 +1649,25 @@ async function bullStatus(getCode) {
                         if(logDebug) console.log(result)
                         if(result.retcode == 0) {
                             if(result.forbidden_code) {
-                                $.log(`用户${nickname[numUser]}可能已黑号：${result.forbidden_reason}\n`);
-                                bullStatusFlag.push(0)
+                                $.log(`用户 ${nickname[numUser]} 可能已黑号：${result.forbidden_reason}\n`);
                             } else {
-                                bullStatusFlag.push(1)
-                                if(getCode == 1) {
-                                    if(bullHelpFlag == 1 && shareFlag == 1) {
-                                        userAppShareCodeArr["bull_invite"].push(result.invite_code)
-                                        userAppShareCodeArr["bull_help"].push(result.help_code)
-                                        $.log(`获取用户${nickname[numUser]}的长牛互助码: invite_code=${result.invite_code}, help_code=${result.help_code}\n`);
-                                    } else {
-                                        userAppShareCodeArr["bull_invite"].push("")
-                                        userAppShareCodeArr["bull_help"].push("")
-                                    }
+                                if(bullHelpFlag == 1 && shareFlag == 1) {
+                                    userAppShareCodeArr["bull_invite"].push(result.invite_code)
+                                    userAppShareCodeArr["bull_help"].push(result.help_code)
+                                    $.log(`获取用户 ${nickname[numUser]} 的长牛互助码: invite_code=${result.invite_code}, help_code=${result.help_code}\n`);
                                 } else {
-                                    $.log(`长牛状态：\n`)
-                                    $.log(`等级: ${result.bullish_info.level}\n`)
-                                    $.log(`下一级需要经验: ${result.bullish_info.next_level_exp}\n`)
-                                    $.log(`现有经验: ${result.bullish_info.exp_value}\n`)
-                                    $.log(`现有牛气: ${result.bullish_info.bullish_value}，开始喂食\n`)
-                                    if(result.bullish_info.bullish_value >= 500) {
-                                        await bullTaskDone(bullTaskArray["feed"])
-                                    }
+                                    userAppShareCodeArr["bull_invite"].push("")
+                                    userAppShareCodeArr["bull_help"].push("")
                                 }
+                                bullStatusFlag = 1
+                                $.log(`长牛状态：\n`)
+                                $.log(`等级: ${result.bullish_info.level}\n`)
+                                $.log(`下一级需要经验: ${result.bullish_info.next_level_exp}\n`)
+                                $.log(`现有经验: ${result.bullish_info.exp_value}\n`)
+                                $.log(`现有牛气: ${result.bullish_info.bullish_value}\n`)
                             }
                         } else {
                             $.log(`查询长牛状态失败：${result.retmsg}\n`);
-                            bullStatusFlag.push(0)
                         }
                     }
                 }
@@ -1799,9 +1805,9 @@ async function appShareTaskReq(share_type,task_type) {
                         if(logDebug) console.log(result)
                         if(result.retcode == 0) {
                             userAppShareCodeArr[task_type][share_type].push(result.share_code)
-                            $.log(`获取用户${nickname[numUser]}的APP的${share_type}互助码: ${result.share_code}\n`);
+                            $.log(`获取用户 ${nickname[numUser]} 的APP的${share_type}互助码: ${result.share_code}\n`);
                         } else {
-                            $.log(`获取用户${nickname[numUser]}的APP的${share_type}互助码失败：${result.retmsg}\n`);
+                            $.log(`获取用户 ${nickname[numUser]} 的APP的${share_type}互助码失败：${result.retmsg}\n`);
                             userAppShareCodeArr[task_type][share_type].push("")
                         }
                         await $.wait(1000)
@@ -1851,9 +1857,9 @@ async function wxShareTaskReq(share_type,task_type) {
                         //console.log(data)
                         if(result.retcode == 0) {
                             userWxShareCodeArr[task_type][share_type].push(result.share_code)
-                            $.log(`获取用户${nickname[numUser]}的微信的${share_type}互助码: ${result.share_code}\n`);
+                            $.log(`获取用户 ${nickname[numUser]} 的微信的${share_type}互助码: ${result.share_code}\n`);
                         } else {
-                            $.log(`获取用户${nickname[numUser]}的微信的${share_type}互助码失败：${result.retmsg}\n`);
+                            $.log(`获取用户 ${nickname[numUser]} 的微信的${share_type}互助码失败：${result.retmsg}\n`);
                             userWxShareCodeArr[task_type][share_type].push("")
                         }
                     }
@@ -1883,7 +1889,7 @@ async function wxShareTaskDone(share_type,share_code) {
                 'Host': `wzq.tenpay.com`,
                 'Connection': `keep-alive`,
                 'User-Agent': wx_UA,
-                'Referer': `https://wzq.tenpay.com/mp/v2/index.html?stat_data=4001000011&remindtype=&__share_flag__=1`,
+                'Referer': `https://wzq.tenpay.com/mp/v2/index.html?__share_flag__=1`,
                 'Accept-Language': `zh-cn`
             },
         };
@@ -1967,7 +1973,7 @@ async function wxGuessHelp(invite_code="",invite_ticket="",invite_time="") {
 }
 
 //猜涨跌状态，获取互助码
-async function appGuessStatus(isGuess) {
+async function appGuessStatus() {
     curTime = new Date()
     rndtime = Math.round(curTime.getTime())
     currentHour = curTime.getHours()
@@ -1997,23 +2003,25 @@ async function appGuessStatus(isGuess) {
                         let result = JSON.parse(data);
                         if(logDebug) console.log(result)
                         if(result.retcode == 0) {
-                            if(isGuess == 1) {
-                                await $.wait(1000)
-                                if(result.notice_info) {
-                                    if(logDebug) console.log(result)
-                                    if(result.notice_info.answer_status == 1) {
-                                        $.log(`上期猜涨跌回答正确，正在取得奖励\n`);
-                                        await appGuessAward(result.notice_info.date)
-                                    } else {
-                                        $.log(`上期猜涨跌回答错误\n`);
-                                    }
-                                    await $.wait(1000)
+                            await $.wait(1000)
+                            if(result.notice_info && result.notice_info[0]) {
+                                if(logDebug) console.log(result)
+                                if(result.notice_info[0].answer_status == 1) {
+                                    $.log(`上期猜涨跌回答正确，正在取得奖励\n`);
+                                    await appGuessAward(result.notice_info[0].date)
+                                } else {
+                                    $.log(`上期猜涨跌回答错误\n`);
                                 }
-                                if(isGuessTime && ((result.T_info && result.T_info.user_answer == 0) || (result.T1_info && result.T1_info.user_answer == 0))) {
+                                await $.wait(1000)
+                            }
+                            if(isGuessTime) {
+                                if((result.T_info && result.T_info[0] && result.T_info[0].user_answer == 0) || 
+                                   (result.T1_info && result.T1_info[0] && result.T1_info[0].user_answer == 0)) {
                                     let guessOption = 1
-                                    if(result.stockinfo) {
-                                        let guessOption = (result.stockinfo.zdf.substr(0,1) == '-') ? 2 : 1
-                                        $.log(`当前上证指数涨幅为${result.stockinfo.zdf}%，为你猜${guessStr}\n`);
+                                    if(result.stockinfo && result.stockinfo[0]) {
+                                        let guessOption = (result.stockinfo[0].zdf[0] == '-') ? 2 : 1
+                                        let guessStr = (guessOption == 2) ? "跌" : "涨"
+                                        $.log(`当前上证指数涨幅为${result.stockinfo[0].zdf}%，为你猜${guessStr}\n`);
                                     } else {
                                         $.log(`未获取到上证指数状态，默认为你猜涨\n`);
                                     }
@@ -2026,24 +2034,25 @@ async function appGuessStatus(isGuess) {
                                         }
                                     }
                                 } else {
-                                    $.log(`脚本只会在10点到13点之间进行竞猜，当前为非竞猜时段\n`);
+                                    $.log(`已竞猜当期涨跌\n`);
                                 }
                             } else {
-                                if(result.invite_info && result.invite_info.invite_code && result.invite_info.invite_ticket && result.invite_info.invite_time) {
-                                    userAppShareCodeArr["guess_invite"].push(result.invite_info.invite_code)
-                                    userAppShareCodeArr["guess_ticket"].push(result.invite_info.invite_ticket)
-                                    userAppShareCodeArr["guess_time"].push(result.invite_info.invite_time)
-                                    $.log(`获取用户${nickname[numUser]}的猜涨跌互助码：${result.invite_info.invite_code}\n`);
-                                    $.log(`获取用户${nickname[numUser]}的猜涨跌票据：${result.invite_info.invite_ticket}\n`);
-                                } else {
-                                    $.log(`获取用户${nickname[numUser]}的猜涨跌互助码失败\n`);
-                                    userAppShareCodeArr["guess_invite"].push("")
-                                    userAppShareCodeArr["guess_ticket"].push("")
-                                    userAppShareCodeArr["guess_time"].push("")
-                                }
+                                $.log(`脚本只会在10点到13点之间进行竞猜，当前为非竞猜时段\n`);
+                            }
+                            if(result.invite_info && result.invite_info.invite_code && result.invite_info.invite_ticket && result.invite_info.invite_time) {
+                                userAppShareCodeArr["guess_invite"].push(result.invite_info.invite_code)
+                                userAppShareCodeArr["guess_ticket"].push(result.invite_info.invite_ticket)
+                                userAppShareCodeArr["guess_time"].push(result.invite_info.invite_time)
+                                $.log(`获取用户 ${nickname[numUser]} 的猜涨跌互助码：${result.invite_info.invite_code}\n`);
+                                $.log(`获取用户 ${nickname[numUser]} 的猜涨跌票据：${result.invite_info.invite_ticket}\n`);
+                            } else {
+                                $.log(`获取用户 ${nickname[numUser]} 的猜涨跌互助码失败\n`);
+                                userAppShareCodeArr["guess_invite"].push("")
+                                userAppShareCodeArr["guess_ticket"].push("")
+                                userAppShareCodeArr["guess_time"].push("")
                             }
                         } else {
-                            $.log(`获取用户${nickname[numUser]}的猜涨跌状态失败：${result.retmsg}\n`);
+                            $.log(`获取用户 ${nickname[numUser]} 的猜涨跌状态失败：${result.retmsg}\n`);
                         }
                         await $.wait(1000)
                     }
@@ -2085,7 +2094,7 @@ async function appGuessAward(guessDate) {
                         let result = JSON.parse(data);
                         if(logDebug) console.log(result)
                         if(result.retcode == 0) {
-                            $.log(`获得${reward_memo}：${reward_value}金币\n`);
+                            $.log(`获得猜涨跌奖励：${reward_value}金币\n`);
                         } else {
                             $.log(`获得猜涨跌奖励失败：${result.retmsg}\n`);
                         }
@@ -2129,9 +2138,9 @@ async function appGuessRiseFall(answer,guessDate) {
                         if(logDebug) console.log(result)
                         if(result.retcode == 0) {
                             guessStr = (answer==1) ? "猜涨" : "猜跌"
-                            $.log(`用户${nickname[numUser]}猜涨跌成功：${guessStr}\n`);
+                            $.log(`用户 ${nickname[numUser]} 猜涨跌成功：${guessStr}\n`);
                         } else {
-                            $.log(`用户${nickname[numUser]}猜涨跌失败：${result.retmsg}\n`);
+                            $.log(`用户 ${nickname[numUser]} 猜涨跌失败：${result.retmsg}\n`);
                         }
                     }
                 }
