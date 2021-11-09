@@ -2019,7 +2019,7 @@ async function appGuessStatus() {
                                    (result.T1_info && result.T1_info[0] && result.T1_info[0].user_answer == 0)) {
                                     let guessOption = 1
                                     if(result.stockinfo && result.stockinfo[0]) {
-                                        let guessOption = (result.stockinfo[0].zdf[0] == '-') ? 2 : 1
+                                        let guessOption = (result.stockinfo[0].zdf.indexof('-') > -1) ? 2 : 1
                                         let guessStr = (guessOption == 2) ? "跌" : "涨"
                                         $.log(`当前上证指数涨幅为${result.stockinfo[0].zdf}%，为你猜${guessStr}\n`);
                                     } else {
@@ -2094,7 +2094,7 @@ async function appGuessAward(guessDate) {
                         let result = JSON.parse(data);
                         if(logDebug) console.log(result)
                         if(result.retcode == 0) {
-                            $.log(`获得猜涨跌奖励：${reward_value}金币\n`);
+                            $.log(`获得猜涨跌奖励：${result.reward_memo} ${result.reward_value}金币\n`);
                         } else {
                             $.log(`获得猜涨跌奖励失败：${result.retmsg}\n`);
                         }
