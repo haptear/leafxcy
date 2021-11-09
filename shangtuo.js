@@ -1,9 +1,14 @@
 /*
 商拓
 
-下载地址： https://shatuvip.com/pages/login/register?recom_code=5290130
-复制链接后，在微信里打开
-推荐码 : 5290130
+下载地址：
+复制链接后，在微信里打开：
+https://shatuvip.com/pages/login/register?recom_code=5290130
+
+或微信扫描二维码下载
+https://raw.githubusercontent.com/leafxcy/JavaScript/main/shangtuo.jpg
+
+推荐码: 5290130
 
 自动看广告，得分红金和抢券。抢到的券可以出售然后提现，最低提现0.5。分红金每日会产生分红，但是需要满88才能提现
 脚本满0.5自动提现，提现需要上传支付宝和微信收款码
@@ -44,9 +49,12 @@ let secretCode
 
 let compTaskFlag
 let grabFlag
+let grabCount
 
 let logDebug = 0
 let logCaller = 0
+
+const notify = $.isNode() ? require('./sendNotify') : '';
 
 !(async () => {
     if (typeof $request !== "undefined") {
@@ -61,30 +69,37 @@ let logCaller = 0
                 if (shangtuoAuthArr[userNum]) {
                     shangtuoAuth = shangtuoAuthArr[userNum];
                     shangtuoUA = shangtuoUAArr[userNum]
+                    accountStatus = 1
                     
                     console.log(`\n=================== 开始账户${userNum + 1} ===================`)
                     
-                    await getAdvertPage(1);
+                    await getUserInfoData(1)
                     await $.wait(1000);
                     
-                    await changeDividendBonusToBalance();
-                    await $.wait(1000);
-                    
-                    await getTradeToPage(1);
-                    await $.wait(1000);
-                    
-                    await getBondList(1);
-                    await $.wait(1000);
-                    
-                    await balanceWithdrawal();
-                    await $.wait(1000);
-                    
-                    await getUserInfoData()
-                    await $.wait(1000);
+                    if(accountStatus) {
+                        /*await getAdvertPage(1);
+                        await $.wait(1000);
+                        
+                        await changeDividendBonusToBalance();
+                        await $.wait(1000);
+                        
+                        await getTradeToPage(1);
+                        await $.wait(1000);
+                        
+                        await getBondList(1);
+                        await $.wait(1000);*/
+                        
+                        await getBalanceWithdrawalData();
+                        await $.wait(1000);
+                        
+                        await getUserInfoData(0)
+                        await $.wait(1000);
+                    }
                 }
             }
 
             $.msg(userInfo)
+            if($.isNode()) await notify.sendNotify($.name, userInfo)
         }
     }
 
@@ -158,7 +173,7 @@ function getRewrite() {
 }
 
 //用户信息
-function getUserInfoData(timeout = 0) {
+function getUserInfoData(checkStatus,timeout = 0) {
     if(logCaller) console.log("call "+ printCaller())
     return new Promise((resolve, reject) => {
         let request = {
@@ -188,26 +203,34 @@ function getUserInfoData(timeout = 0) {
                         let result = JSON.parse(data)
                         if(logDebug) console.log(result)
                         if (result.code == 0) {
-                            console.log(`\n账户名称：${result.result.nickname}`)
-                            userInfo += `\n账户名称：${result.result.nickname}\n`
-                            console.log(`  推荐码：    ${result.result.recom_code}`)
-                            userInfo += `  推荐码：    ${result.result.recom_code}\n`
-                            console.log(`  分红金总额：${result.result.dividend}`)
-                            userInfo += `  分红金总额：${result.result.dividend}\n`
-                            console.log(`  分红余额：  ${result.result.balance_with}`)
-                            userInfo += `  分红余额：  ${result.result.balance_with}\n`
-                            console.log(`  红包余额：  ${result.result.balance_packet}`)
-                            userInfo += `  红包余额：  ${result.result.balance_packet}\n`
-                            console.log(`  推广余额：  ${result.result.balance_extend}`)
-                            userInfo += `  推广余额：  ${result.result.balance_extend}\n`
-                            console.log(`  可售商券：  ${result.result.bond_count}`)
-                            userInfo += `  可售商券：  ${result.result.bond_count}\n`
-                            console.log(`  消费余额：  ${result.result.balance}`)
-                            userInfo += `  消费余额：  ${result.result.balance}\n`
-                            console.log(`  消费商券：  ${result.result.balance_bonds}`)
-                            userInfo += `  消费商券：  ${result.result.balance_bonds}\n`
+                            if(checkStatus) {
+                                console.log(`\n账户${userNum+1}名称：${result.result.nickname}`)
+                                userInfo += `\n账户${userNum+1}名称：${result.result.nickname}\n`
+                            } else {
+                                console.log(`\n账户${userNum+1}名称：${result.result.nickname}`)
+                                console.log(`  推荐码：    ${result.result.recom_code}`)
+                                userInfo += `  推荐码：    ${result.result.recom_code}\n`
+                                console.log(`  分红金总额：${result.result.dividend}`)
+                                userInfo += `  分红金总额：${result.result.dividend}\n`
+                                console.log(`  分红余额：  ${result.result.balance_with}`)
+                                userInfo += `  分红余额：  ${result.result.balance_with}\n`
+                                console.log(`  红包余额：  ${result.result.balance_packet}`)
+                                userInfo += `  红包余额：  ${result.result.balance_packet}\n`
+                                console.log(`  推广余额：  ${result.result.balance_extend}`)
+                                userInfo += `  推广余额：  ${result.result.balance_extend}\n`
+                                console.log(`  可售商券：  ${result.result.bond_count}`)
+                                userInfo += `  可售商券：  ${result.result.bond_count}\n`
+                                console.log(`  消费余额：  ${result.result.balance}`)
+                                userInfo += `  消费余额：  ${result.result.balance}\n`
+                                console.log(`  消费商券：  ${result.result.balance_bonds}`)
+                                userInfo += `  消费商券：  ${result.result.balance_bonds}\n`
+                            }
                         } else {
-                            console.log(`获取账户信息失败: ${result.msg}`)
+                            console.log(`\n获取账户${userNum+1}信息失败: ${result.msg}`)
+                            if(result.msg.indexOf('登录超时') > -1) {
+                                accountStatus = 0
+                                userInfo += `\n获取账户${userNum+1}信息失败: ${result.msg}，请尝试重新捉CK\n`
+                            }
                         }
                     }
                 }
@@ -404,7 +427,13 @@ function changeDividendBonusToBalance(timeout = 0) {
                     if (safeGet(data)) {
                         let result = JSON.parse(data)
                         if(logDebug) console.log(result)
-                        console.log(`提取分红金结果: ${result.msg}`)
+                        if(result.code == 0) {
+                            console.log(`提取分红金获得: ${result.result.bonus}`)
+                            userInfo += `提取分红金获得: ${result.result.bonus}\n`
+                        } else {
+                            console.log(`提取分红金失败: ${result.msg}`)
+                        }
+                        
                     }
                 }
             } catch (e) {
@@ -595,10 +624,11 @@ function getBondList(pageNo,timeout = 0) {
                             let numList = result.result.length
                             for(let i=0; i<numList; i++) {
                                 quanItem = result.result[i]
-                                //每个券可以抢10次
+                                //每个券可以抢10次，必须抢完10次才能抢下一个券
+                                //为了防止网络波动，强制循环抢同一个券直到失败
                                 grabFlag = 1
-                                for(let j=0; j<10 && grabFlag; j++) {
-                                    grabFlag = 0
+                                grabCount = 0
+                                while(grabFlag && grabCount<50) {
                                     await getBondAdvertId(quanItem.face_price,quanItem.id)
                                 }
                             }
@@ -668,6 +698,7 @@ function getBondAdvertId(face_price,id,timeout = 0) {
 //抢券
 function grab(face_price,id,token,timeout = 0) {
     if(logCaller) console.log("call "+ printCaller())
+    grabCount++
     return new Promise((resolve, reject) => {
         let request = {
             url: `https://api.shatuvip.com/bond/grab`,
@@ -698,10 +729,10 @@ function grab(face_price,id,token,timeout = 0) {
                         if(logDebug) console.log(result)
                         if (result.code == 0) {
                             console.log(`抢${face_price}券成功：${result.msg}`)
-                            grabFlag = 1
                             await $.wait(1000)
                         } else {
                             console.log(`抢${face_price}券失败：${result.msg}`)
+                            grabFlag = 0
                         }
                     }
                 }
@@ -715,8 +746,110 @@ function grab(face_price,id,token,timeout = 0) {
     })
 }
 
+//提现列表
+function getBalanceWithdrawalData(timeout = 0) {
+    if(logCaller) console.log("call "+ printCaller())
+    return new Promise((resolve, reject) => {
+        let request = {
+            url: `https://api.shatuvip.com/withdrawal/getBalanceWithdrawalData?type=1`,
+            headers: {
+                "Host": "api.shatuvip.com",
+                "Origin": "https://shatuvip.com",
+                "Connection": "keep-alive",
+                "Authorization": shangtuoAuth,
+                "User-Agent": shangtuoUA,
+                "Content-Type": "application/json",
+                "Accept": "*/*",
+                "Referer": "https://shatuvip.com/",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "zh-CN,zh-Hans;q=0.9"
+            },
+        }
+        
+        $.get(request, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("API请求失败");
+                    
+                    console.log(err + " at function " + printCaller());
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data)
+                        if(logDebug) console.log(result)
+                        if(result.code == 0) {
+                            for(let i=0; i<result.result.list.length; i++) {
+                                let withdrawItem = result.result.list[i]
+                                if(withdrawItem.balance == 0.5) {
+                                    await queryWithdrawId(withdrawItem.id,withdrawItem.balance)
+                                }
+                            }
+                        } else {
+                            console.log(`查询提现列表失败：${result.msg}`)
+                        }
+                        await $.wait(1000);
+                    }
+                }
+            } catch (e) {
+                console.log(e + " at function " + printCaller(), resp);
+            } finally {
+                resolve();
+            }
+        })
+    })
+}
+
+//提现ID查询
+function queryWithdrawId(id,balance,timeout = 0) {
+    if(logCaller) console.log("call "+ printCaller())
+    return new Promise((resolve, reject) => {
+        let request = {
+            url: `https://api.shatuvip.com/withdrawal/with?withdrawal_id=${id}`,
+            headers: {
+                "Host": "api.shatuvip.com",
+                "Origin": "https://shatuvip.com",
+                "Connection": "keep-alive",
+                "Authorization": shangtuoAuth,
+                "User-Agent": shangtuoUA,
+                "Content-Type": "application/json",
+                "Accept": "*/*",
+                "Referer": "https://shatuvip.com/",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "zh-CN,zh-Hans;q=0.9"
+            },
+        }
+        
+        $.get(request, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("API请求失败");
+                    
+                    console.log(err + " at function " + printCaller());
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data)
+                        if(logDebug) console.log(result)
+                        if(result.code == 0) {
+                            let withdrawFee = result.result["with"]
+                            let withdrawMoney = balance - withdrawFee
+                            console.log(`发起提现${balance}元，手续费${withdrawFee}，到手${withdrawMoney}`)
+                            await balanceWithdrawal(id,withdrawMoney)
+                        } else {
+                            console.log(`查询提现ID${id}失败：${result.msg}`)
+                        }
+                        await $.wait(1000);
+                    }
+                }
+            } catch (e) {
+                console.log(e + " at function " + printCaller(), resp);
+            } finally {
+                resolve();
+            }
+        })
+    })
+}
+
 //提现
-function balanceWithdrawal(timeout = 0) {
+function balanceWithdrawal(id,withdrawMoney,timeout = 0) {
     if(logCaller) console.log("call "+ printCaller())
     return new Promise((resolve, reject) => {
         let request = {
@@ -733,7 +866,7 @@ function balanceWithdrawal(timeout = 0) {
                 "Accept-Encoding": "gzip, deflate, br",
                 "Accept-Language": "zh-CN,zh-Hans;q=0.9"
             },
-            body: `{"id": "21", "type": "1"}`,
+            body: `{"id": "${id}", "type": "1"}`,
         }
         
         $.post(request, async (err, resp, data) => {
@@ -746,7 +879,12 @@ function balanceWithdrawal(timeout = 0) {
                     if (safeGet(data)) {
                         let result = JSON.parse(data)
                         if(logDebug) console.log(result)
-                        console.log(result.msg)
+                        if(result.code == 0) {
+                            console.log(`${result.msg}，预计到账${withdrawMoney}元`)
+                            userInfo += `${result.msg}，预计到账${withdrawMoney}元\n`
+                        } else {
+                            console.log(`提现失败：${result.msg}`)
+                        }
                         await $.wait(1000);
                     }
                 }
