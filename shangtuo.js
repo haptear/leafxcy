@@ -10,7 +10,8 @@ https://raw.githubusercontent.com/leafxcy/JavaScript/main/shangtuo.jpg
 
 推荐码: 5290130
 
-自动看广告，得分红金和抢券。抢到的券可以出售然后提现，最低提现0.5。分红金每日会产生分红，但是需要满88才能提现
+自动看广告，得分红金和抢券。抢到的券可以出售然后提现，最低提现0.5，分红金每日会产生分红，但是需要满88才能提现
+抢券时段为7:00到23:59，建议在8点后跑脚本，7点有可能会卡
 脚本满0.5自动提现，提现需要上传支付宝和微信收款码
 CK有效期较短，可能几天后需要重新捉
 只测试了IOS，测试过V2P，青龙可以跑
@@ -26,7 +27,7 @@ V2P，圈X重写食用:
 
 [task_local]
 #商拓
-30 0 * * * shangtuo.js, tag=商拓, enabled=true
+30 9,21 * * * shangtuo.js, tag=商拓, enabled=true
 
 [rewrite_local]
 https://api.shatuvip.com/advert/getAdvertPage? url script-request-header https://raw.githubusercontent.com/leafxcy/JavaScript/main/shangtuo.js
