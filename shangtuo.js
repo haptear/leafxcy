@@ -13,7 +13,7 @@ https://raw.githubusercontent.com/leafxcy/JavaScript/main/shangtuo.jpg
 自动看广告，得分红金和抢券。抢到的券可以出售然后提现，最低提现0.5。分红金每日会产生分红，但是需要满88才能提现
 脚本满0.5自动提现，提现需要上传支付宝和微信收款码
 CK有效期较短，可能几天后需要重新捉
-测试过V2P，青龙可以跑
+只测试了IOS，测试过V2P，青龙可以跑
 
 青龙：
 捉api.shatuvip.com的包，大部分包里都有Authorization和User-Agent，分别保存在shangtuoAuth和shangtuoUA里
@@ -48,6 +48,7 @@ let userInfo = ""
 let secretCode
 
 let compTaskFlag
+let grabNext
 let grabFlag
 let grabCount
 
@@ -73,25 +74,45 @@ const notify = $.isNode() ? require('./sendNotify') : '';
                     
                     console.log(`\n=================== 开始账户${userNum + 1} ===================`)
                     
+                    //账户信息查询
                     await getUserInfoData(1)
                     await $.wait(1000);
                     
                     if(accountStatus) {
+                        
+                        //看广告得分红金
                         await getAdvertPage(1);
                         await $.wait(1000);
                         
+                        //提取分红金
                         await changeDividendBonusToBalance();
                         await $.wait(1000);
                         
+                        //出售券
                         await getTradeToPage(1);
                         await $.wait(1000);
                         
+                        //抢券
                         await getBondList(1);
                         await $.wait(1000);
                         
+                        //查询团队
+                        await getTeamData();
+                        await $.wait(1000);
+                        
+                        //收取直推活跃红包
+                        await getALlRecommendAdvertListPage(0,1);
+                        await $.wait(1000);
+                        
+                        //收取间推活跃红包
+                        await getALlRecommendAdvertListPage(0,2);
+                        await $.wait(1000);
+                        
+                        //提现
                         await getBalanceWithdrawalData();
                         await $.wait(1000);
                         
+                        //账户信息查询
                         await getUserInfoData(0)
                         await $.wait(1000);
                     }
@@ -196,7 +217,6 @@ function getUserInfoData(checkStatus,timeout = 0) {
             try {
                 if (err) {
                     console.log("API请求失败");
-                    
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
@@ -267,7 +287,6 @@ function getAdvertPage(pageNo,timeout = 0) {
             try {
                 if (err) {
                     console.log("API请求失败");
-                    
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
@@ -321,7 +340,6 @@ function getAdvertInfo(cid,timeout = 0) {
             try {
                 if (err) {
                     console.log("API请求失败");
-                    
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
@@ -370,7 +388,6 @@ function completeTask(cid,secret,timeout = 0) {
             try {
                 if (err) {
                     console.log("API请求失败");
-                    
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
@@ -421,7 +438,6 @@ function changeDividendBonusToBalance(timeout = 0) {
             try {
                 if (err) {
                     console.log("API请求失败");
-                    
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
@@ -469,7 +485,6 @@ function getTradeToPage(pageNo,timeout = 0) {
             try {
                 if (err) {
                     console.log("API请求失败");
-                    
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
@@ -522,7 +537,6 @@ function getPriceSection(id,price,timeout = 0) {
             try {
                 if (err) {
                     console.log("API请求失败");
-                    
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
@@ -571,7 +585,6 @@ function tradePutShop(id,price,sellPrice,timeout = 0) {
             try {
                 if (err) {
                     console.log("API请求失败");
-                    
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
@@ -613,7 +626,6 @@ function getBondList(pageNo,timeout = 0) {
             try {
                 if (err) {
                     console.log("API请求失败");
-                    
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
@@ -622,7 +634,8 @@ function getBondList(pageNo,timeout = 0) {
                         if (result.code == 0) {
                             console.log(`获取抢券广告任务列表ID成功`)
                             let numList = result.result.length
-                            for(let i=0; i<numList; i++) {
+                            grabNext = 1
+                            for(let i=0; i<numList && grabNext == 1; i++) {
                                 quanItem = result.result[i]
                                 //每个券可以抢10次，必须抢完10次才能抢下一个券
                                 //为了防止网络波动，强制循环抢同一个券直到失败
@@ -671,7 +684,6 @@ function getBondAdvertId(face_price,id,timeout = 0) {
             try {
                 if (err) {
                     console.log("API请求失败");
-                    
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
@@ -721,7 +733,6 @@ function grab(face_price,id,token,timeout = 0) {
             try {
                 if (err) {
                     console.log("API请求失败");
-                    
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
@@ -733,6 +744,10 @@ function grab(face_price,id,token,timeout = 0) {
                         } else {
                             console.log(`抢${face_price}券失败：${result.msg}`)
                             grabFlag = 0
+                            if(result.msg.indexOf('消费余额不足') > -1) {
+                                grabNext = 0
+                                console.log(`消费余额不足，停止抢更高面额券`)
+                            }
                         }
                     }
                 }
@@ -743,6 +758,162 @@ function grab(face_price,id,token,timeout = 0) {
             }
         })
         
+    })
+}
+
+//团队人数
+function getTeamData(timeout = 0) {
+    if(logCaller) console.log("call "+ printCaller())
+    return new Promise((resolve, reject) => {
+        let request = {
+            url: `https://api.shatuvip.com/team/getTeamData`,
+            headers: {
+                "Host": "api.shatuvip.com",
+                "Origin": "https://shatuvip.com",
+                "Connection": "keep-alive",
+                "Authorization": shangtuoAuth,
+                "User-Agent": shangtuoUA,
+                "Content-Type": "application/json",
+                "Accept": "*/*",
+                "Referer": "https://shatuvip.com/",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "zh-CN,zh-Hans;q=0.9"
+            },
+        }
+        
+        $.get(request, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("API请求失败");
+                    console.log(err + " at function " + printCaller());
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data)
+                        if(logDebug) console.log(result)
+                        if(result.code == 0) {
+                            console.log(`推广总人数：${result.result.num}`)
+                            console.log(`----直推人数：${result.result.sonNum}`)
+                            console.log(`--------有效直推：${result.result.sonAttestationNum}`)
+                            console.log(`--------无效直推：${result.result.songNoAttestationNum}`)
+                            console.log(`----间推人数：${result.result.grandsonNum}`)
+                            console.log(`--------有效间推：${result.result.grandsonAttestationNum}`)
+                            console.log(`--------无效间推：${result.result.grandsonNoAttestationNum}`)
+                        } else {
+                            console.log(`查询团队人数失败：${result.msg}`)
+                        }
+                        await $.wait(1000);
+                    }
+                }
+            } catch (e) {
+                console.log(e + " at function " + printCaller(), resp);
+            } finally {
+                resolve();
+            }
+        })
+    })
+}
+
+//团队列表
+//type: 1 -- 直推， 2 -- 间推
+function getALlRecommendAdvertListPage(pageNum,type,timeout = 0) {
+    if(logCaller) console.log("call "+ printCaller())
+    return new Promise((resolve, reject) => {
+        let request = {
+            url: `https://api.shatuvip.com/team/getALlRecommendAdvertListPage?pageNo=${pageNum}&type=${type}`,
+            headers: {
+                "Host": "api.shatuvip.com",
+                "Origin": "https://shatuvip.com",
+                "Connection": "keep-alive",
+                "Authorization": shangtuoAuth,
+                "User-Agent": shangtuoUA,
+                "Content-Type": "application/json",
+                "Accept": "*/*",
+                "Referer": "https://shatuvip.com/",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "zh-CN,zh-Hans;q=0.9"
+            },
+        }
+        
+        $.get(request, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("API请求失败");
+                    console.log(err + " at function " + printCaller());
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data)
+                        if(logDebug) console.log(result)
+                        if(result.code == 0) {
+                            if(result.result && result.result[0]){
+                                for(let i=0; i<result.result.length; i++) {
+                                    let teamMember = result.result[i]
+                                    if(teamMember.receive == 1) {
+                                        await grabTeamWith(teamMember.recom_code)
+                                    }
+                                }
+                                await $.wait(500)
+                                await getALlRecommendAdvertListPage(pageNum+1,type)
+                            } else {
+                                //已查询完毕
+                            }
+                        } else {
+                            console.log(`查询团队列表失败：${result.msg}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log(e + " at function " + printCaller(), resp);
+            } finally {
+                resolve();
+            }
+        })
+    })
+}
+
+//团队活跃红包
+function grabTeamWith(recom_code,timeout = 0) {
+    if(logCaller) console.log("call "+ printCaller())
+    return new Promise((resolve, reject) => {
+        let request = {
+            url: `https://api.shatuvip.com/team/grabTeamWith`,
+            headers: {
+                "Host": "api.shatuvip.com",
+                "Origin": "https://shatuvip.com",
+                "Connection": "keep-alive",
+                "Authorization": shangtuoAuth,
+                "User-Agent": shangtuoUA,
+                "Content-Type": "application/json",
+                "Accept": "*/*",
+                "Referer": "https://shatuvip.com/",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "zh-CN,zh-Hans;q=0.9"
+            },
+            body: `{"recom_code":${recom_code}}`,
+        }
+        
+        $.post(request, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("API请求失败");
+                    console.log(err + " at function " + printCaller());
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data)
+                        if(logDebug) console.log(result)
+                        if(result.code == 0) {
+                            console.log(`收取团队活跃红包成功：${result.msg}`)
+                        } else {
+                            console.log(`收取团队活跃红包失败：${result.msg}`)
+                        }
+                        await $.wait(500);
+                    }
+                }
+            } catch (e) {
+                console.log(e + " at function " + printCaller(), resp);
+            } finally {
+                resolve();
+            }
+        })
     })
 }
 
@@ -770,7 +941,6 @@ function getBalanceWithdrawalData(timeout = 0) {
             try {
                 if (err) {
                     console.log("API请求失败");
-                    
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
@@ -822,7 +992,6 @@ function queryWithdrawId(id,balance,timeout = 0) {
             try {
                 if (err) {
                     console.log("API请求失败");
-                    
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
@@ -873,7 +1042,6 @@ function balanceWithdrawal(id,withdrawMoney,timeout = 0) {
             try {
                 if (err) {
                     console.log("API请求失败");
-                    
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
