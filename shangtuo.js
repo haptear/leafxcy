@@ -77,7 +77,7 @@ const notify = $.isNode() ? require('./sendNotify') : '';
                     await $.wait(1000);
                     
                     if(accountStatus) {
-                        /*await getAdvertPage(1);
+                        await getAdvertPage(1);
                         await $.wait(1000);
                         
                         await changeDividendBonusToBalance();
@@ -87,7 +87,7 @@ const notify = $.isNode() ? require('./sendNotify') : '';
                         await $.wait(1000);
                         
                         await getBondList(1);
-                        await $.wait(1000);*/
+                        await $.wait(1000);
                         
                         await getBalanceWithdrawalData();
                         await $.wait(1000);
