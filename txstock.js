@@ -2019,7 +2019,7 @@ async function appGuessStatus() {
                                    (result.T1_info && result.T1_info[0] && result.T1_info[0].user_answer == 0)) {
                                     let guessOption = 1
                                     if(result.stockinfo && result.stockinfo[0]) {
-                                        let guessOption = (result.stockinfo[0].zdf.indexof('-') > -1) ? 2 : 1
+                                        let guessOption = (result.stockinfo[0].zdf.indexOf('-') > -1) ? 2 : 1
                                         let guessStr = (guessOption == 2) ? "跌" : "涨"
                                         $.log(`当前上证指数涨幅为${result.stockinfo[0].zdf}%，为你猜${guessStr}\n`);
                                     } else {
