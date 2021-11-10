@@ -9,11 +9,16 @@ https://shatuvip.com/pages/login/register?recom_code=5290130
 https://raw.githubusercontent.com/leafxcy/JavaScript/main/shangtuo.jpg
 
 推荐码: 5290130
-
-玩法：进APP后，先手动去全球分红->提取分红金，然后在个人中心->分红余额->提现一次0.03元，就可以跑脚本了
-自动看广告，得分红金和抢券。抢券会得到红包余额，券也可以出售。主要收入为红包余额最低提现0.5。分红金每日会产生分红，但是需要满88才能提现
 抢券时段为7:00到23:59，建议在8点后跑脚本，7点有可能会卡
-脚本满0.5自动提现，提现需要上传支付宝和微信收款码
+
+玩法：进APP后，先手动去全球分红->提取分红金，然后在个人中心->分红余额->提现一次0.03元(需要上传支付宝和微信收款码)，就可以跑脚本了
+脚本会自动看广告得分红金，抢券，提现
+主要收入为抢券得到的红包余额，最低提现0.5。分红金每日会产生分红，但是需要满88才能提现。
+推广余额需要拉人头，大家可以拿着这个脚本，用自己的推荐码去发展下线
+现在会首先尝试提现推广余额，然后尝试提现红包余额
+脚本默认红包余额满0.5自动提现，可以自己新建一个环境变量 stCash 设定红包余额提现金额，export stCash=20
+!!!但是不建议提现20块以下，因为手续费高，只有0.5手续费低!!!
+
 CK有效期较短，可能几天后需要重新捉
 只测试了IOS，测试过V2P，青龙可以跑
 
@@ -50,6 +55,8 @@ let shangtuoUA = ''
 let userNum = 0
 let userInfo = ""
 
+var packWithdrawAmount = ($.isNode() ? (process.env.stCash) : ($.getval('stCash'))) || 0.5;
+
 let secretCode
 
 let compTaskFlag
@@ -69,6 +76,7 @@ const notify = $.isNode() ? require('./sendNotify') : '';
         
         if(await checkEnv()) {
             
+            console.log(`推荐大家拿着这个脚本，用自己的邀请码去发展下线\n`)
             console.log(`共${shangtuoAuthArr.length}个账号\n`)
             for (userNum = 0; userNum < shangtuoAuthArr.length; userNum++) {
                 
@@ -113,8 +121,16 @@ const notify = $.isNode() ? require('./sendNotify') : '';
                         await getALlRecommendAdvertListPage(0,2);
                         await $.wait(1000);
                         
-                        //提现
-                        await getBalanceWithdrawalData();
+                        //优先尝试提现分红金余额
+                        await getUserBalanceWith()
+                        await $.wait(1000);
+                        
+                        //然后尝试提现推广余额
+                        await getPopularizeBalance()
+                        await $.wait(1000);
+                        
+                        //最后尝试提现红包余额
+                        await getPackBalance();
                         await $.wait(1000);
                         
                         //账户信息查询
@@ -353,7 +369,7 @@ function getAdvertInfo(cid,timeout = 0) {
                         if (result.code == 0) {
                             console.log(`开始浏览广告${cid}`)
                             secretCode = result.result.uniTime2
-                            await $.wait(6000);
+                            await $.wait(7000);
                         } else {
                             console.log(`浏览广告失败: ${result.msg}`)
                         }
@@ -806,7 +822,6 @@ function getTeamData(timeout = 0) {
                         } else {
                             console.log(`查询团队人数失败：${result.msg}`)
                         }
-                        await $.wait(1000);
                     }
                 }
             } catch (e) {
@@ -849,6 +864,7 @@ function getALlRecommendAdvertListPage(pageNum,type,timeout = 0) {
                         let result = JSON.parse(data)
                         if(logDebug) console.log(result)
                         if(result.code == 0) {
+                            await $.wait(500)
                             if(result.result && result.result[0]){
                                 for(let i=0; i<result.result.length; i++) {
                                     let teamMember = result.result[i]
@@ -856,7 +872,6 @@ function getALlRecommendAdvertListPage(pageNum,type,timeout = 0) {
                                         await grabTeamWith(teamMember.recom_code)
                                     }
                                 }
-                                await $.wait(500)
                                 await getALlRecommendAdvertListPage(pageNum+1,type)
                             } else {
                                 //已查询完毕
@@ -903,6 +918,7 @@ function grabTeamWith(recom_code,timeout = 0) {
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
+                        await $.wait(500);
                         let result = JSON.parse(data)
                         if(logDebug) console.log(result)
                         if(result.code == 0) {
@@ -910,7 +926,6 @@ function grabTeamWith(recom_code,timeout = 0) {
                         } else {
                             console.log(`收取团队活跃红包失败：${result.msg}`)
                         }
-                        await $.wait(500);
                     }
                 }
             } catch (e) {
@@ -922,12 +937,12 @@ function grabTeamWith(recom_code,timeout = 0) {
     })
 }
 
-//提现列表
-function getBalanceWithdrawalData(timeout = 0) {
+//分红金余额查询
+function getUserBalanceWith(timeout = 0) {
     if(logCaller) console.log("call "+ printCaller())
     return new Promise((resolve, reject) => {
         let request = {
-            url: `https://api.shatuvip.com/withdrawal/getBalanceWithdrawalData?type=1`,
+            url: `https://api.shatuvip.com/user/getUserBalanceWith`,
             headers: {
                 "Host": "api.shatuvip.com",
                 "Origin": "https://shatuvip.com",
@@ -952,16 +967,187 @@ function getBalanceWithdrawalData(timeout = 0) {
                         let result = JSON.parse(data)
                         if(logDebug) console.log(result)
                         if(result.code == 0) {
+                            await $.wait(1000);
+                            if(result.result.balance >= 88) {
+                                console.log(`\n分红金余额：${result.result.balance}，开始尝试提现`)
+                                await getBalanceWithdrawalData(0,result.result.balance)
+                            } else {
+                                console.log(`\n分红金余额：${result.result.balance}，不执行提现`)
+                            }
+                        } else {
+                            console.log(`\n查询分红金余额失败：${result.msg}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log(e + " at function " + printCaller(), resp);
+            } finally {
+                resolve();
+            }
+        })
+    })
+}
+
+//推广余额查询
+function getPopularizeBalance(timeout = 0) {
+    if(logCaller) console.log("call "+ printCaller())
+    return new Promise((resolve, reject) => {
+        let request = {
+            url: `https://api.shatuvip.com/user/getPopularizeBalance`,
+            headers: {
+                "Host": "api.shatuvip.com",
+                "Origin": "https://shatuvip.com",
+                "Connection": "keep-alive",
+                "Authorization": shangtuoAuth,
+                "User-Agent": shangtuoUA,
+                "Content-Type": "application/json",
+                "Accept": "*/*",
+                "Referer": "https://shatuvip.com/",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "zh-CN,zh-Hans;q=0.9"
+            },
+        }
+        
+        $.get(request, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("API请求失败");
+                    console.log(err + " at function " + printCaller());
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data)
+                        if(logDebug) console.log(result)
+                        if(result.code == 0) {
+                            await $.wait(1000);
+                            if(result.result.balance >= 1) {
+                                console.log(`\n推广余额：${result.result.balance}，开始尝试提现`)
+                                await getBalanceWithdrawalData(2,result.result.balance)
+                            } else {
+                                console.log(`\n推广余额：${result.result.balance}，不执行提现`)
+                            }
+                        } else {
+                            console.log(`\n查询推广余额失败：${result.msg}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log(e + " at function " + printCaller(), resp);
+            } finally {
+                resolve();
+            }
+        })
+    })
+}
+
+//红包余额查询
+function getPackBalance(timeout = 0) {
+    if(logCaller) console.log("call "+ printCaller())
+    return new Promise((resolve, reject) => {
+        let request = {
+            url: `https://api.shatuvip.com/user/getPackBalance`,
+            headers: {
+                "Host": "api.shatuvip.com",
+                "Origin": "https://shatuvip.com",
+                "Connection": "keep-alive",
+                "Authorization": shangtuoAuth,
+                "User-Agent": shangtuoUA,
+                "Content-Type": "application/json",
+                "Accept": "*/*",
+                "Referer": "https://shatuvip.com/",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "zh-CN,zh-Hans;q=0.9"
+            },
+        }
+        
+        $.get(request, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("API请求失败");
+                    console.log(err + " at function " + printCaller());
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data)
+                        if(logDebug) console.log(result)
+                        if(result.code == 0) {
+                            await $.wait(1000);
+                            if(result.result.balance >= packWithdrawAmount) {
+                                console.log(`\n红包余额${result.result.balance}，尝试为你提现${packWithdrawAmount}`)
+                                await getBalanceWithdrawalData(1,result.result.balance,packWithdrawAmount)
+                            } else {
+                                console.log(`\n红包余额${result.result.balance}，不足${packWithdrawAmount}，不执行提现`)
+                            }
+                        } else {
+                            console.log(`\n查询红包余额失败：${result.msg}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log(e + " at function " + printCaller(), resp);
+            } finally {
+                resolve();
+            }
+        })
+    })
+}
+
+//提现列表
+//type: 0 -- 分红金余额, 1 -- 红包余额, 2 -- 推广余额
+function getBalanceWithdrawalData(type,balance,withdrawAmount=0,timeout = 0) {
+    if(logCaller) console.log("call "+ printCaller())
+    return new Promise((resolve, reject) => {
+        let request = {
+            url: `https://api.shatuvip.com/withdrawal/getBalanceWithdrawalData?type=${type}`,
+            headers: {
+                "Host": "api.shatuvip.com",
+                "Origin": "https://shatuvip.com",
+                "Connection": "keep-alive",
+                "Authorization": shangtuoAuth,
+                "User-Agent": shangtuoUA,
+                "Content-Type": "application/json",
+                "Accept": "*/*",
+                "Referer": "https://shatuvip.com/",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "zh-CN,zh-Hans;q=0.9"
+            },
+        }
+        
+        $.get(request, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("API请求失败");
+                    console.log(err + " at function " + printCaller());
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data)
+                        if(logDebug) console.log(result)
+                        if(result.code == 0) {
+                            await $.wait(1000);
+                            let withdrawId = 0
+                            let withdrawBalance = 0
                             for(let i=0; i<result.result.list.length; i++) {
                                 let withdrawItem = result.result.list[i]
-                                if(withdrawItem.balance == 0.5) {
-                                    await queryWithdrawId(withdrawItem.id,withdrawItem.balance)
+                                if(withdrawAmount > 0) {
+                                    //指定提现数量
+                                    if(withdrawItem.balance == withdrawAmount) {
+                                        withdrawId = withdrawItem.id
+                                        withdrawBalance = withdrawItem.balance
+                                        break;
+                                    }
+                                }else {
+                                    if(balance >= withdrawItem.balance && withdrawItem.balance > withdrawBalance) {
+                                        withdrawId = withdrawItem.id
+                                        withdrawBalance = withdrawItem.balance
+                                    }
                                 }
+                            }
+                            if(withdrawBalance != 0 && withdrawId!= 0) {
+                                await queryWithdrawId(withdrawId,withdrawBalance)
+                            } else {
+                                console.log(`余额不足`)
                             }
                         } else {
                             console.log(`查询提现列表失败：${result.msg}`)
                         }
-                        await $.wait(1000);
                     }
                 }
             } catch (e) {
@@ -1003,6 +1189,7 @@ function queryWithdrawId(id,balance,timeout = 0) {
                         let result = JSON.parse(data)
                         if(logDebug) console.log(result)
                         if(result.code == 0) {
+                            await $.wait(1000);
                             let withdrawFee = result.result["with"]
                             let withdrawMoney = balance - withdrawFee
                             console.log(`发起提现${balance}元，手续费${withdrawFee}，到手${withdrawMoney}`)
@@ -1010,7 +1197,6 @@ function queryWithdrawId(id,balance,timeout = 0) {
                         } else {
                             console.log(`查询提现ID${id}失败：${result.msg}`)
                         }
-                        await $.wait(1000);
                     }
                 }
             } catch (e) {
@@ -1050,6 +1236,7 @@ function balanceWithdrawal(id,withdrawMoney,timeout = 0) {
                     console.log(err + " at function " + printCaller());
                 } else {
                     if (safeGet(data)) {
+                        await $.wait(1000);
                         let result = JSON.parse(data)
                         if(logDebug) console.log(result)
                         if(result.code == 0) {
@@ -1058,7 +1245,6 @@ function balanceWithdrawal(id,withdrawMoney,timeout = 0) {
                         } else {
                             console.log(`提现失败：${result.msg}`)
                         }
-                        await $.wait(1000);
                     }
                 }
             } catch (e) {
