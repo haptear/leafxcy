@@ -41,7 +41,7 @@
     {
     "match": "https://tq.xunsl.com/v5/CommonReward/toGetReward.json",
     "target": "https://raw.githubusercontent.com/leafxcy/JavaScript/main/jctq/jctqbox.js",
-    "enable": false
+    "enable": true
     },
     {
     "match": "https://tq.xunsl.com/v5/wechat/withdraw2.json",
