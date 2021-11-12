@@ -39,7 +39,7 @@
     "enable": true
     },
     {
-    "match": "https://tq.xunsl.com/v5/CommonReward/toGetReward.json",
+    "match": "https://tq.xunsl.com/v5/CommonReward/toGetReward",
     "target": "https://raw.githubusercontent.com/leafxcy/JavaScript/main/jctq/jctqbox.js",
     "enable": true
     },
