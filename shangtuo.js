@@ -60,9 +60,10 @@ var packWithdrawAmount = ($.isNode() ? (process.env.stCash) : ($.getval('stCash'
 let secretCode
 
 let compTaskFlag
-let grabNext
 let grabFlag
 let grabCount
+let getBondListFlag
+let quanList
 
 let logDebug = 0
 let logCaller = 0
@@ -105,10 +106,6 @@ const notify = $.isNode() ? require('./sendNotify') : '';
                         await getTradeToPage(1);
                         await $.wait(1000);
                         
-                        //抢券
-                        await getBondList(1);
-                        await $.wait(1000);
-                        
                         //查询团队
                         await getTeamData();
                         await $.wait(1000);
@@ -121,6 +118,14 @@ const notify = $.isNode() ? require('./sendNotify') : '';
                         await getALlRecommendAdvertListPage(0,2);
                         await $.wait(1000);
                         
+                        //转换红包余额
+                        await getPackBalance(0);
+                        await $.wait(1000);
+                        
+                        //抢券
+                        await getUserBalance();
+                        await $.wait(1000);
+                        
                         //优先尝试提现分红金余额
                         await getUserBalanceWith()
                         await $.wait(1000);
@@ -130,7 +135,7 @@ const notify = $.isNode() ? require('./sendNotify') : '';
                         await $.wait(1000);
                         
                         //最后尝试提现红包余额
-                        await getPackBalance();
+                        await getPackBalance(1);
                         await $.wait(1000);
                         
                         //账户信息查询
@@ -564,7 +569,7 @@ function getPriceSection(id,price,timeout = 0) {
                         let result = JSON.parse(data)
                         if(logDebug) console.log(result)
                         if (result.code == 0) {
-                            sellPrice = result.result.min
+                            sellPrice = result.result.max
                             console.log(`${price}券可出售金额为${result.result.min}到${result.result.max}，设置为${sellPrice}`)
                             await tradePutShop(id,price,sellPrice)
                         } else {
@@ -623,8 +628,33 @@ function tradePutShop(id,price,sellPrice,timeout = 0) {
     })
 }
 
+//抢券操作
+async function getAllBondList(balance) {
+    let i = 1
+    quanList = []
+    getBondListFlag = 1
+    while(getBondListFlag) {
+        await getBondList(i,balance)
+        i++
+    }
+    
+    let sortList = quanList.sort(function(a,b){return b["face_price"]-a["face_price"]});
+    
+    let numList = sortList.length
+    for(let i=0; i<numList; i++) {
+        quanItem = sortList[i]
+        //每个券可以抢10次，必须抢完10次才能抢下一个券
+        //为了防止网络波动，强制循环抢同一个券直到失败
+        grabFlag = 1
+        grabCount = 0
+        while(grabFlag && grabCount<30) {
+            await getBondAdvertId(quanItem.face_price,quanItem.id)
+        }
+    }
+}
+
 //抢券列表
-function getBondList(pageNo,timeout = 0) {
+function getBondList(pageNo,balance,timeout = 0) {
     if(logCaller) console.log("call "+ printCaller())
     return new Promise((resolve, reject) => {
         let request = {
@@ -652,23 +682,24 @@ function getBondList(pageNo,timeout = 0) {
                     if (safeGet(data)) {
                         let result = JSON.parse(data)
                         if(logDebug) console.log(result)
+                        await $.wait(500)
                         if (result.code == 0) {
-                            console.log(`获取抢券广告任务列表ID成功`)
-                            let numList = result.result.length
-                            grabNext = 1
-                            for(let i=0; i<numList && grabNext == 1; i++) {
-                                quanItem = result.result[i]
-                                //每个券可以抢10次，必须抢完10次才能抢下一个券
-                                //为了防止网络波动，强制循环抢同一个券直到失败
-                                grabFlag = 1
-                                grabCount = 0
-                                while(grabFlag && grabCount<50) {
-                                    await getBondAdvertId(quanItem.face_price,quanItem.id)
+                            if(result.result && result.result[0]) {
+                                let numList = result.result.length
+                                console.log(`获取抢券列表第${pageNo}页成功，找到${numList}个抢券ID`)
+                                for(let i=0; i<numList; i++) {
+                                    quanItem = result.result[i]
+                                    if(balance >= quanItem.price) {
+                                        quanList.push(quanItem)
+                                    }
                                 }
+                            } else {
+                                //没有可抢的券了，停止查询
+                                getBondListFlag = 0
                             }
-                            await $.wait(1000);
                         } else {
-                            console.log(`获取抢券广告列表失败：${result.msg}`)
+                            console.log(`获取抢券列表失败：${result.msg}`)
+                            getBondListFlag = 0
                         }
                     }
                 }
@@ -765,10 +796,6 @@ function grab(face_price,id,token,timeout = 0) {
                         } else {
                             console.log(`抢${face_price}券失败：${result.msg}`)
                             grabFlag = 0
-                            if(result.msg.indexOf('消费余额不足') > -1) {
-                                grabNext = 0
-                                console.log(`消费余额不足，停止抢更高面额券`)
-                            }
                         }
                     }
                 }
@@ -937,6 +964,54 @@ function grabTeamWith(recom_code,timeout = 0) {
     })
 }
 
+//消费余额查询
+function getUserBalance(timeout = 0) {
+    if(logCaller) console.log("call "+ printCaller())
+    return new Promise((resolve, reject) => {
+        let request = {
+            url: `https://api.shatuvip.com/user/getUserBalance`,
+            headers: {
+                "Host": "api.shatuvip.com",
+                "Origin": "https://shatuvip.com",
+                "Connection": "keep-alive",
+                "Authorization": shangtuoAuth,
+                "User-Agent": shangtuoUA,
+                "Content-Type": "application/json",
+                "Accept": "*/*",
+                "Referer": "https://shatuvip.com/",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "zh-CN,zh-Hans;q=0.9"
+            },
+        }
+        
+        $.get(request, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("API请求失败");
+                    console.log(err + " at function " + printCaller());
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data)
+                        if(logDebug) console.log(result)
+                        await $.wait(500);
+                        if(result.code == 0) {
+                            console.log(`\n消费余额：${result.result.balance}，开始抢券`)
+                            await getAllBondList(result.result.balance)
+                        } else {
+                            console.log(`\n查询消费余额失败：${result.msg}`)
+                            await getAllBondList(0)
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log(e + " at function " + printCaller(), resp);
+            } finally {
+                resolve();
+            }
+        })
+    })
+}
+
 //分红金余额查询
 function getUserBalanceWith(timeout = 0) {
     if(logCaller) console.log("call "+ printCaller())
@@ -1040,7 +1115,8 @@ function getPopularizeBalance(timeout = 0) {
 }
 
 //红包余额查询
-function getPackBalance(timeout = 0) {
+//move: 0 -- 转换为消费余额, 1 -- 提现
+function getPackBalance(move,timeout = 0) {
     if(logCaller) console.log("call "+ printCaller())
     return new Promise((resolve, reject) => {
         let request = {
@@ -1070,14 +1146,68 @@ function getPackBalance(timeout = 0) {
                         if(logDebug) console.log(result)
                         if(result.code == 0) {
                             await $.wait(1000);
-                            if(result.result.balance >= packWithdrawAmount) {
-                                console.log(`\n红包余额${result.result.balance}，尝试为你提现${packWithdrawAmount}`)
-                                await getBalanceWithdrawalData(1,result.result.balance,packWithdrawAmount)
+                            if(move == 0) {
+                                if(result.result.balance > 0) {
+                                    console.log(``)
+                                    await balancePackChangeBalance(result.result.balance)
+                                }
                             } else {
-                                console.log(`\n红包余额${result.result.balance}，不足${packWithdrawAmount}，不执行提现`)
+                                if(result.result.balance >= packWithdrawAmount) {
+                                    console.log(`\n红包余额${result.result.balance}，尝试为你提现${packWithdrawAmount}`)
+                                    await getBalanceWithdrawalData(1,result.result.balance,packWithdrawAmount)
+                                } else {
+                                    console.log(`\n红包余额${result.result.balance}，不足${packWithdrawAmount}，不执行提现`)
+                                }
                             }
                         } else {
                             console.log(`\n查询红包余额失败：${result.msg}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log(e + " at function " + printCaller(), resp);
+            } finally {
+                resolve();
+            }
+        })
+    })
+}
+
+//红包余额转换消费余额
+function balancePackChangeBalance(balance,timeout = 0) {
+    if(logCaller) console.log("call "+ printCaller())
+    return new Promise((resolve, reject) => {
+        let request = {
+            url: `https://api.shatuvip.com/user/balancePackChangeBalance`,
+            headers: {
+                "Host": "api.shatuvip.com",
+                "Origin": "https://shatuvip.com",
+                "Connection": "keep-alive",
+                "Authorization": shangtuoAuth,
+                "User-Agent": shangtuoUA,
+                "Content-Type": "application/json",
+                "Accept": "*/*",
+                "Referer": "https://shatuvip.com/",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "zh-CN,zh-Hans;q=0.9"
+            },
+            body: `{"balance":"${balance}"}`,
+        }
+        
+        $.post(request, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("API请求失败");
+                    console.log(err + " at function " + printCaller());
+                } else {
+                    if (safeGet(data)) {
+                        await $.wait(1000);
+                        let result = JSON.parse(data)
+                        if(logDebug) console.log(result)
+                        if(result.code == 0) {
+                            console.log(`\n将红包余额${balance}转换为消费余额来抢更高面额的券`)
+                        } else {
+                            console.log(`\n红包余额转换失败：${result.msg}`)
                         }
                     }
                 }
