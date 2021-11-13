@@ -19,6 +19,8 @@ https://raw.githubusercontent.com/leafxcy/JavaScript/main/shangtuo.jpg
 脚本默认红包余额满0.5自动提现，可以自己新建一个环境变量 stCash 设定红包余额提现金额，export stCash=20
 !!!但是不建议提现20块以下，因为手续费高，只有0.5手续费低!!!
 
+脚本会自动把红包余额转换为消费余额来抢更高面额的券，如果不想换的自己建一个环境变量 stExchange 设为0，export stExchange=0
+
 CK有效期较短，可能几天后需要重新捉
 只测试了IOS，测试过V2P，青龙可以跑
 
@@ -56,6 +58,7 @@ let userNum = 0
 let userInfo = ""
 
 var packWithdrawAmount = ($.isNode() ? (process.env.stCash) : ($.getval('stCash'))) || 0.5;
+var autoExchange = ($.isNode() ? (process.env.stExchange) : ($.getval('stExchange'))) || 1;
 
 let secretCode
 
@@ -64,6 +67,9 @@ let grabFlag
 let grabCount
 let getBondListFlag
 let quanList
+
+let retryLimit = 5
+let retryTime
 
 let logDebug = 0
 let logCaller = 0
@@ -95,7 +101,10 @@ const notify = $.isNode() ? require('./sendNotify') : '';
                     if(accountStatus) {
                         
                         //看广告得分红金
+                        retryTime = 0
                         await getAdvertPage(1);
+                        await $.wait(1000);
+                        await getAdvertPage(2);
                         await $.wait(1000);
                         
                         //提取分红金
@@ -292,6 +301,7 @@ function getUserInfoData(checkStatus,timeout = 0) {
 //广告列表id
 function getAdvertPage(pageNo,timeout = 0) {
     if(logCaller) console.log("call "+ printCaller())
+    retryTime++
     return new Promise((resolve) => {
         let request = {
             url: `https://api.shatuvip.com/advert/getAdvertPage?type=1&pageNo=${pageNo}&column_id=1`,
@@ -314,6 +324,9 @@ function getAdvertPage(pageNo,timeout = 0) {
                 if (err) {
                     console.log("API请求失败");
                     console.log(err + " at function " + printCaller());
+                    if(retryTime < retryLimit) {
+                        await getAdvertPage(pageNo)
+                    }
                 } else {
                     if (safeGet(data)) {
                         let result = JSON.parse(data)
@@ -323,7 +336,6 @@ function getAdvertPage(pageNo,timeout = 0) {
                             adNum = result.result.length
                             compTaskFlag = 1
                             for(let i=0; i<adNum && compTaskFlag; i++) {
-                                compTaskFlag = 0
                                 cid = result.result[i].id
                                 await getAdvertInfo(cid)
                                 await completeTask(cid,secretCode)
@@ -422,9 +434,9 @@ function completeTask(cid,secret,timeout = 0) {
                         if (result.code == 0) {
                             if(result.msg) {
                                 console.log(`获得${result.msg}`)
-                                compTaskFlag = 1
                             } else {
                                 console.log(`没有获得分红金，结束浏览广告`)
+                                compTaskFlag = 0
                             }
                         } else {
                             console.log(`获取分红金失败：${result.msg}`)
@@ -1045,6 +1057,7 @@ function getUserBalanceWith(timeout = 0) {
                             await $.wait(1000);
                             if(result.result.balance >= 88) {
                                 console.log(`\n分红金余额：${result.result.balance}，开始尝试提现`)
+                                retryTime = 0
                                 await getBalanceWithdrawalData(0,result.result.balance)
                             } else {
                                 console.log(`\n分红金余额：${result.result.balance}，不执行提现`)
@@ -1096,6 +1109,7 @@ function getPopularizeBalance(timeout = 0) {
                             await $.wait(1000);
                             if(result.result.balance >= 1) {
                                 console.log(`\n推广余额：${result.result.balance}，开始尝试提现`)
+                                retryTime = 0
                                 await getBalanceWithdrawalData(2,result.result.balance)
                             } else {
                                 console.log(`\n推广余额：${result.result.balance}，不执行提现`)
@@ -1147,12 +1161,19 @@ function getPackBalance(move,timeout = 0) {
                         if(result.code == 0) {
                             await $.wait(1000);
                             if(move == 0) {
-                                if(result.result.balance > 0) {
-                                    console.log(``)
-                                    await balancePackChangeBalance(result.result.balance)
+                                if(autoExchange >0) {
+                                    console.log(`\n您当前设置为自动转换消费余额`)
+                                    if(result.result.balance > 0.5) {
+                                        await balancePackChangeBalance(result.result.balance-0.5)
+                                    } else {
+                                        console.log(`\n红包余额${result.result.balance}，少于0.5，不转换消费余额`)
+                                    }
+                                } else {
+                                    console.log(`\n您当前设置为不转换消费余额`)
                                 }
                             } else {
                                 if(result.result.balance >= packWithdrawAmount) {
+                                    retryTime = 0
                                     console.log(`\n红包余额${result.result.balance}，尝试为你提现${packWithdrawAmount}`)
                                     await getBalanceWithdrawalData(1,result.result.balance,packWithdrawAmount)
                                 } else {
@@ -1341,6 +1362,7 @@ function queryWithdrawId(id,balance,timeout = 0) {
 //提现
 function balanceWithdrawal(id,withdrawMoney,timeout = 0) {
     if(logCaller) console.log("call "+ printCaller())
+    retryTime++
     return new Promise((resolve, reject) => {
         let request = {
             url: `https://api.shatuvip.com/withdrawal/balanceWithdrawal`,
@@ -1364,6 +1386,9 @@ function balanceWithdrawal(id,withdrawMoney,timeout = 0) {
                 if (err) {
                     console.log("API请求失败");
                     console.log(err + " at function " + printCaller());
+                    if(retryTime < retryLimit) {
+                        await balanceWithdrawal(id,withdrawMoney)
+                    }
                 } else {
                     if (safeGet(data)) {
                         await $.wait(1000);
