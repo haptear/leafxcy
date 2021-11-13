@@ -10,7 +10,7 @@
       "time": "21 8,20 * * *",
       "job": {
         "type": "runjs",
-        "target": "jctqkkz.js"
+        "target": "https://raw.githubusercontent.com/leafxcy/JavaScript/main/jctq/jctqkkz.js"
       }
     },
     {
@@ -19,7 +19,7 @@
       "time": "18 22 * * *",
       "job": {
         "type": "runjs",
-        "target": "jctq_today_score.js"
+        "target": "https://raw.githubusercontent.com/leafxcy/JavaScript/main/jctq/jctq_today_score.js"
       }
     },
     {
@@ -28,7 +28,7 @@
       "time": "23 0,6 * * *",
       "job": {
         "type": "runjs",
-        "target": "jctqqd.js"
+        "target": "https://raw.githubusercontent.com/leafxcy/JavaScript/main/jctq/jctqqd.js"
       }
     },
     {
@@ -37,7 +37,7 @@
       "time": "12 7,19 * * *",
       "job": {
         "type": "runjs",
-        "target": "jctqwz.js"
+        "target": "https://raw.githubusercontent.com/leafxcy/JavaScript/main/jctq/jctqwz.js"
       }
     },
     {
@@ -46,7 +46,7 @@
       "time": "12 6,12,18 * * *",
       "job": {
         "type": "runjs",
-        "target": "jctq_share.js"
+        "target": "https://raw.githubusercontent.com/leafxcy/JavaScript/main/jctq/jctq_share.js"
       }
     },
     {
@@ -55,7 +55,7 @@
       "time": "20 9,17 * * *",
       "job": {
         "type": "runjs",
-        "target": "jctq_Adv_video.js"
+        "target": "https://raw.githubusercontent.com/leafxcy/JavaScript/main/jctq/jctq_Adv_video.js"
       }
     },
     {
@@ -64,7 +64,7 @@
       "time": "31 8,16 * * *",
       "job": {
         "type": "runjs",
-        "target": "jctq_Rotary.js"
+        "target": "https://raw.githubusercontent.com/leafxcy/JavaScript/main/jctq/jctq_Rotary.js"
       }
     },
     {
@@ -73,7 +73,7 @@
       "time": "24 21,22 * * *",
       "job": {
         "type": "runjs",
-        "target": "jctqbox.js"
+        "target": "https://raw.githubusercontent.com/leafxcy/JavaScript/main/jctq/jctqbox.js"
       }
     },
     {
@@ -82,7 +82,7 @@
       "time": "32 2,6,20 * * *",
       "job": {
         "type": "runjs",
-        "target": "jctq_friendSign.js"
+        "target": "https://raw.githubusercontent.com/leafxcy/JavaScript/main/jctq/jctq_friendSign.js"
       }
     },
     {
@@ -91,7 +91,7 @@
       "time": "34 23 * * *",
       "job": {
         "type": "runjs",
-        "target": "jctq_withdraw.js"
+        "target": "https://raw.githubusercontent.com/leafxcy/JavaScript/main/jctq/jctq_withdraw.js"
       }
     }
   ]
