@@ -20,7 +20,7 @@ V2P，圈X：重写方法 -- 点击右下角【我的】-> 【每日签到赚现
 0 * * * * https://raw.githubusercontent.com/leafxcy/JavaScript/main/blackUnique.js, tag=全球购骑士特权, enabled=true
 [rewrite_local]
 https://pyp-api.chuxingyouhui.com/api/app/userCenter/v1/info url script-request-header https://raw.githubusercontent.com/leafxcy/JavaScript/main/blackUnique.js
-https://market.chuxingyouhui.com/promo-bargain-api/activity/mqq/api/indexTopInfo?  url https://raw.githubusercontent.com/leafxcy/JavaScript/main/blackUnique.js
+https://market.chuxingyouhui.com/promo-bargain-api/activity/mqq/api/indexTopInfo?  url script-request-header https://raw.githubusercontent.com/leafxcy/JavaScript/main/blackUnique.js
 [MITM]
 hostname = *.chuxingyouhui.com
 
