@@ -3,13 +3,13 @@
 
 下载地址：
 复制链接后，在微信里打开：
-https://shatuvip.com/pages/login/register?recom_code=5290130
+https://shatuvip.com/pages/login/register?recom_code=7755074
 
 或微信扫描二维码下载
 https://raw.githubusercontent.com/leafxcy/JavaScript/main/shangtuo.jpg
 
-推荐码: 5290130
-抢券时段为7:00到23:59，建议在8点后跑脚本，7点有可能会卡
+推荐码: 7755074
+抢券时段为7:00到23:59，建议在9点后跑脚本，7点有可能会卡
 
 玩法：进APP后，先手动去全球分红->提取分红金，然后在个人中心->分红余额->提现一次0.03元(需要上传支付宝和微信收款码)，就可以跑脚本了
 脚本会自动看广告得分红金，抢券，提现
@@ -20,6 +20,7 @@ https://raw.githubusercontent.com/leafxcy/JavaScript/main/shangtuo.jpg
 !!!但是不建议提现20块以下，因为手续费高，只有0.5手续费低!!!
 
 脚本会自动把红包余额转换为消费余额来抢更高面额的券，如果不想换的自己建一个环境变量 stExchange 设为0，export stExchange=0
+青龙环境下会有推送，不想要推送的建一个环境变量 stNotify 设为0，export stNotify=0
 
 CK有效期较短，可能几天后需要重新捉
 只测试了IOS，测试过V2P，青龙可以跑
@@ -59,6 +60,7 @@ let userInfo = ""
 
 var packWithdrawAmount = ($.isNode() ? (process.env.stCash) : ($.getval('stCash'))) || 0.5;
 var autoExchange = ($.isNode() ? (process.env.stExchange) : ($.getval('stExchange'))) || 1;
+var nodeNotify = ($.isNode() ? (process.env.stNotify) : ($.getval('stNotify'))) || 1;
 
 let secretCode
 
@@ -102,6 +104,7 @@ const notify = $.isNode() ? require('./sendNotify') : '';
                         
                         //看广告得分红金
                         retryTime = 0
+                        compTaskFlag = 1
                         await getAdvertPage(1);
                         await $.wait(1000);
                         await getAdvertPage(2);
@@ -155,7 +158,7 @@ const notify = $.isNode() ? require('./sendNotify') : '';
             }
 
             $.msg(userInfo)
-            if($.isNode()) await notify.sendNotify($.name, userInfo)
+            if(nodeNotify == 1 && $.isNode()) await notify.sendNotify($.name, userInfo)
         }
     }
 
@@ -334,7 +337,6 @@ function getAdvertPage(pageNo,timeout = 0) {
                         if (result.code == 0) {
                             console.log(`获取分红金广告任务列表成功`)
                             adNum = result.result.length
-                            compTaskFlag = 1
                             for(let i=0; i<adNum && compTaskFlag; i++) {
                                 cid = result.result[i].id
                                 await getAdvertInfo(cid)
@@ -1162,9 +1164,10 @@ function getPackBalance(move,timeout = 0) {
                             await $.wait(1000);
                             if(move == 0) {
                                 if(autoExchange >0) {
-                                    console.log(`\n您当前设置为自动转换消费余额`)
+                                    console.log(`\n您当前设置为自动转换消费余额，当前红包余额${result.result.balance}`)
                                     if(result.result.balance > 0.5) {
-                                        await balancePackChangeBalance(result.result.balance-0.5)
+                                        let exchangeAmount = Math.floor((result.result.balance-0.5)*100) / 100
+                                        await balancePackChangeBalance(exchangeAmount)
                                     } else {
                                         console.log(`\n红包余额${result.result.balance}，少于0.5，不转换消费余额`)
                                     }
