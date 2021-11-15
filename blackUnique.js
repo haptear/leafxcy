@@ -5,8 +5,9 @@ APP：全球购骑士特权
 https://raw.githubusercontent.com/leafxcy/JavaScript/main/blackUnique.jpg
 
 定时为每小时一次，务必在0分到5分之间运行，目前只写了每日领勋章和领取存钱罐的任务，大概每天3毛
+手动点一下签到页面的【收零花钱】领一次金币
 需要看视频的任务暂时搞不定，能搞定再加上
-暂不支持多账号
+只测试了IOS的青龙和V2P，暂不支持多账号
 
 青龙：
 捉https://market.chuxingyouhui.com/promo-bargain-api/activity/mqq/api/indexTopInfo?的包，获得appId
