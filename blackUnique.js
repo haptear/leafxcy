@@ -5,8 +5,8 @@ APP：全球购骑士特权
 https://raw.githubusercontent.com/leafxcy/JavaScript/main/blackUnique.jpg
 
 定时为每小时一次，务必在0分到5分之间运行，目前只写了每日领勋章和领取存钱罐的任务，大概每天3毛
-手动点一下签到页面的【收零花钱】领一次金币
-需要看视频的任务暂时搞不定，能搞定再加上
+提现需要关注微信公众号，在公众号里申请提现
+请手动点一下签到页面的【收零花钱】领一次金币，去【果园】里选择水果种子
 只测试了IOS的青龙和V2P，暂不支持多账号
 
 青龙：
@@ -29,15 +29,28 @@ hostname = *.chuxingyouhui.com
 
 const jsname = '全球购骑士特权'
 const $ = Env(jsname)
-//const notifyFlag = 1; //0为关闭通知，1为打开通知,默认为1
+const notifyFlag = 1; //0为关闭通知，1为打开通知,默认为1
 const logDebug = 0
 
 //const notify = $.isNode() ? require('./sendNotify') : '';
-//let notifyStr = ''
+let notifyStr = ''
 
 let blankJSON = {"black-token":"", "token":"", "User-Agent":"", "device-value":"", "device-type":"", "phpUserId":"", "appId":""}
 let blackJSONStr = ($.isNode() ? (process.env.blackJSON) : ($.getval('blackJSON'))) || ''
 let blackJSON = blackJSONStr ? JSON.parse(blackJSONStr) : blankJSON
+
+let reqTime = ''
+let userSign = ''
+let redPacketId = ''
+let fruitId = ''
+let userFruitId = ''
+let activityId = ''
+let redPacketCount = 0
+let waterCount = 0
+let fertilizerCount = 0
+let clickTreeTimes = 5
+let signRetryTimes = 3
+let signRetryCount = 0
 
 var todayDate = formatDateTime(new Date());
 let bussinessInfo = '{}'
@@ -59,21 +72,32 @@ let rndtime = "" //毫秒
             return
         }
         
+        console.log('\n提现需要关注微信公众号，在公众号里申请提现')
+        
         await querySignStatus()
-        await $.wait(1000)
         
         await listUserTask()
-        await $.wait(1000)
         
-        //红包需要sign，翻倍视频也需要sign
         //await listRedPacket()
         
         await queryPiggyInfo()
-        await $.wait(1000)
         
         //翻卡看视频需要前置条件
         //await getUserFlopRecord()
         
+        await userFruitDetail()
+        
+        await waterTaskList()
+        
+        await nutrientTaskList()
+        
+        await userFertilizerDetail()
+        
+        await getTreeCoupon()
+        
+        await userInfo()
+        
+        await showmsg()
     }
   
 
@@ -92,7 +116,7 @@ async function showmsg() {
 
     if (notifyFlag == 1) {
         $.msg(notifyBody);
-        if ($.isNode()){await notify.sendNotify($.name, notifyBody );}
+        //if ($.isNode()){await notify.sendNotify($.name, notifyBody );}
     }
 }
 
@@ -101,34 +125,41 @@ async function getRewrite()
     if($request.url.indexOf("userCenter/v1/info") > -1) {
         if($request.headers['black-token']) {
             blackJSON['black-token'] = $request.headers['black-token']
-            console.log(`获取到black-token: ${blackJSON['black-token']}`)
+            $.log(`获取到black-token: ${blackJSON['black-token']}`)
+            $.msg(`获取到black-token: ${blackJSON['black-token']}`)
         }
         if($request.headers['token']) {
             blackJSON['token'] = $request.headers['token']
-            console.log(`获取到token: ${blackJSON['token']}`)
+            $.log(`获取到token: ${blackJSON['token']}`)
+            $.msg(`获取到token: ${blackJSON['token']}`)
         }
         if($request.headers['User-Agent']) {
             blackJSON['User-Agent'] = $request.headers['User-Agent']
-            console.log(`获取到User-Agent: ${blackJSON['User-Agent']}`)
+            $.log(`获取到User-Agent: ${blackJSON['User-Agent']}`)
+            $.msg(`获取到User-Agent: ${blackJSON['User-Agent']}`)
         }
         if($request.headers['device-value']) {
             blackJSON['device-value'] = $request.headers['device-value']
-            console.log(`获取到device-value: ${blackJSON['device-value']}`)
+            $.log(`获取到device-value: ${blackJSON['device-value']}`)
+            $.msg(`获取到device-value: ${blackJSON['device-value']}`)
         }
         if($request.headers['device-type']) {
             blackJSON['device-type'] = $request.headers['device-type']
-            console.log(`获取到device-type: ${blackJSON['device-type']}`)
+            $.log(`获取到device-type: ${blackJSON['device-type']}`)
+            $.msg(`获取到device-type: ${blackJSON['device-type']}`)
         }
         if($request.headers['phpUserId']) {
             blackJSON['phpUserId'] = $request.headers['phpUserId']
-            console.log(`获取到phpUserId: ${blackJSON['phpUserId']}`)
+            $.log(`获取到phpUserId: ${blackJSON['phpUserId']}`)
+            $.msg(`获取到phpUserId: ${blackJSON['phpUserId']}`)
         }
         $.setdata(JSON.stringify(blackJSON),'blackJSON')
     }
     
     if($request.url.indexOf("mqq/api/indexTopInfo?appId=") > -1) {
         blackJSON['appId'] = $request.url.match(/appId=([\w]+)/)[1]
-        console.log(`获取到appId: ${blackJSON['appId']}`)
+        $.log(`获取到appId: ${blackJSON['appId']}`)
+        $.msg(`获取到appId: ${blackJSON['appId']}`)
         $.setdata(JSON.stringify(blackJSON),'blackJSON')
     }
 }
@@ -138,6 +169,7 @@ async function checkEnv()
     if(!blackJSON['black-token'] || !blackJSON['token'] || !blackJSON['User-Agent'] || !blackJSON['device-value'] || !blackJSON['device-type'] || !blackJSON['phpUserId'] || !blackJSON['appId'])
     {
         $.log(`捉包信息不全，请检查空白字段并重新捉包: ${JSON.stringify(blackJSON)}\n`)
+        $.msg(`捉包信息不全，请检查空白字段并重新捉包: ${JSON.stringify(blackJSON)}\n`)
         return false
     }
     
@@ -173,7 +205,7 @@ async function getBussinessInfo(adId,activityType,bussinessType,version) {
         $.post(url, async (err, resp, data) => {
             try {
                 if (err) {
-                    console.log(caller + ": API请求失败");
+                    console.log("Fucntion " + caller + ": API请求失败");
                     console.log(JSON.stringify(err));
                     $.logErr(err);
                 } else {
@@ -219,7 +251,7 @@ async function querySignStatus() {
         $.get(url, async (err, resp, data) => {
             try {
                 if (err) {
-                    console.log(caller + ": API请求失败");
+                    console.log("Fucntion " + caller + ": API请求失败");
                     console.log(JSON.stringify(err));
                     $.logErr(err);
                 } else {
@@ -264,7 +296,7 @@ async function doSign() {
             url: 'https://market.chuxingyouhui.com/promo-bargain-api/activity/weekSign/api/v1_0/sign?appId='+blackJSON['appId'],
             headers: {
                 'Host' : 'market.chuxingyouhui.com',
-                'request-body' : reqBody,
+                'request-body' : encodeBody,
                 'Accept' : 'application/json, text/plain, */*',
                 'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
                 'Accept-Encoding' : 'gzip, deflate, br',
@@ -276,18 +308,18 @@ async function doSign() {
                 'Referer' : 'https://m.black-unique.com/',
                 'Connection' : 'keep-alive',
             },
+            body: reqBody
         };
         $.post(url, async (err, resp, data) => {
             try {
                 if (err) {
-                    console.log(caller + ": API请求失败");
+                    console.log("Fucntion " + caller + ": API请求失败");
                     console.log(JSON.stringify(err));
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
                         let result = JSON.parse(data);
                         if(logDebug) console.log(result);
-                        console.log(result)
                         if(result.code == 200) {
                             console.log(`\n签到成功获得：${result.data.reward}金币，已连续签到${result.data.continuouslyDay}天\n`)
                         } else {
@@ -332,7 +364,7 @@ async function listUserTask() {
         $.post(url, async (err, resp, data) => {
             try {
                 if (err) {
-                    console.log(caller + ": API请求失败");
+                    console.log("Fucntion " + caller + ": API请求失败");
                     console.log(JSON.stringify(err));
                     $.logErr(err);
                 } else {
@@ -399,7 +431,7 @@ async function doTask(taskType,userTaskId,taskTitle) {
         $.post(url, async (err, resp, data) => {
             try {
                 if (err) {
-                    console.log(caller + ": API请求失败");
+                    console.log("Fucntion " + caller + ": API请求失败");
                     console.log(JSON.stringify(err));
                     $.logErr(err);
                 } else {
@@ -445,7 +477,7 @@ async function queryPiggyInfo() {
         $.get(url, async (err, resp, data) => {
             try {
                 if (err) {
-                    console.log(caller + ": API请求失败");
+                    console.log("Fucntion " + caller + ": API请求失败");
                     console.log(JSON.stringify(err));
                     $.logErr(err);
                 } else {
@@ -502,7 +534,7 @@ async function clickPiggy() {
         $.post(url, async (err, resp, data) => {
             try {
                 if (err) {
-                    console.log(caller + ": API请求失败");
+                    console.log("Fucntion " + caller + ": API请求失败");
                     console.log(JSON.stringify(err));
                     $.logErr(err);
                 } else {
@@ -553,7 +585,7 @@ async function getUserFlopRecord() {
         $.post(url, async (err, resp, data) => {
             try {
                 if (err) {
-                    console.log(caller + ": API请求失败");
+                    console.log("Fucntion " + caller + ": API请求失败");
                     console.log(JSON.stringify(err));
                     $.logErr(err);
                 } else {
@@ -613,7 +645,7 @@ async function userFlop(serialNumber) {
         $.post(url, async (err, resp, data) => {
             try {
                 if (err) {
-                    console.log(caller + ": API请求失败");
+                    console.log("Fucntion " + caller + ": API请求失败");
                     console.log(JSON.stringify(err));
                     $.logErr(err);
                 } else {
@@ -640,6 +672,9 @@ async function userFlop(serialNumber) {
 async function listRedPacket() {
     let caller = printCaller()
     //rndtime = Math.round(new Date().getTime())
+    curTime = new Date()
+    currentHour = curTime.getHours()
+    let isGetRedTime = ((currentHour < 23) && (currentHour > 6)) ? 1 : 0
     return new Promise((resolve) => {
         let url = {
             url: 'https://fanxian-api.chuxingyouhui.com/api/redPacketIncome/v1_0/listRedPacket',
@@ -663,7 +698,7 @@ async function listRedPacket() {
         $.post(url, async (err, resp, data) => {
             try {
                 if (err) {
-                    console.log(caller + ": API请求失败");
+                    console.log("Fucntion " + caller + ": API请求失败");
                     console.log(JSON.stringify(err));
                     $.logErr(err);
                 } else {
@@ -671,10 +706,17 @@ async function listRedPacket() {
                         let result = JSON.parse(data);
                         if(logDebug) console.log(result);
                         if(result.code == 200) {
-                            if(result.data && result.data.redPacketList && Array.isArray(result.data.redPacketList)) {
+                            if(isGetRedTime == 1 && result.data && result.data.redPacketList && Array.isArray(result.data.redPacketList)) {
+                                redPacketCount = 0
                                 for(let i=0; i<result.data.redPacketList.length; i++) {
                                     let redItem = result.data.redPacketList[i]
-                                    if(redItem.status == 2) {
+                                    if(redItem.money > 0) {
+                                        redPacketCount++
+                                    }
+                                    if(redItem.status == 2 && redItem.money == 0 && redPacketCount < 7) {
+                                        signRetryCount = 0
+                                        //await getSignInfo('open')
+                                        //await $.wait(500)
                                         await openRedPacket()
                                     }
                                 }
@@ -696,8 +738,7 @@ async function listRedPacket() {
 //开定点红包
 async function openRedPacket() {
     let caller = printCaller()
-    rndtime = Math.round(new Date().getTime()/1000)
-    let sign = ``//todo
+    //rndtime = Math.round(new Date().getTime()/1000)
     return new Promise((resolve) => {
         let url = {
             url: 'https://pyp-api.chuxingyouhui.com/api/knightCard/redPacket/v1_0/openRedPacket',
@@ -714,29 +755,873 @@ async function openRedPacket() {
                 'Origin' : 'https://m.black-unique.com',
                 'User-Agent' : blackJSON['User-Agent'],
                 'Referer' : 'https://m.black-unique.com/',
-                'Content-Length' : '87',
                 'Accept-Encoding' : 'gzip, deflate, br',
                 'Connection' : 'keep-alive',
                 'Content-Type' : 'application/json;charset=utf-8',
             },
-            body: `{"click":false,"sign":"${sign}","ts":"${rndtime}"}`
+            body: `{"click":false,"sign":"${userSign}","ts":"${reqTime}"}`
         };
         $.post(url, async (err, resp, data) => {
             try {
                 if (err) {
-                    console.log(caller + ": API请求失败");
+                    console.log("Fucntion " + caller + ": API请求失败");
                     console.log(JSON.stringify(err));
                     $.logErr(err);
                 } else {
                     if (safeGet(data)) {
                         let result = JSON.parse(data);
                         if(logDebug) console.log(result);
-                        console.log(result)
                         if(result.code == 200) {
                             console.log(`打开红包获得：${result.data.money}现金`)
+                            signRetryCount = 0
+                            //await getSignInfo('boom')
+                            //await $.wait(2000)
+                            await boomRedPacket()
                         } else {
                             console.log(`打开红包失败：${result.msg}`)
                         }
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//定点红包翻倍
+async function boomRedPacket() {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime()/1000)
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://fanxian-api.chuxingyouhui.com/api/redPacket/increase/v1_0/boom',
+            headers: {
+                'Host' : 'fanxian-api.chuxingyouhui.com',
+                'Accept' : 'application/json, text/plain, */*',
+                'phpUserId' : blackJSON['phpUserId'],
+                'device-value' : blackJSON['device-value'],
+                'device-type' : blackJSON['device-type'],
+                'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
+                'token' : blackJSON['token'],
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'Origin' : 'https://m.black-unique.com',
+                'User-Agent' : blackJSON['User-Agent'],
+                'Referer' : 'https://m.black-unique.com/',
+                'Connection' : 'keep-alive',
+                'Content-Type' : 'application/json;charset=utf-8',
+            },
+            body: `{"redPacketId":"${redPacketId}","sign":"${userSign}","ts":"${reqTime}"}`,
+        };
+        $.post(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            console.log(`红包翻倍获得：${result.data.redPacketIncreaseAmount}现金`)
+                        } else {
+                            console.log(`红包翻倍失败：${result.msg}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//果园状态
+async function userFruitDetail() {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime()/1000)
+    reqBody = `{"appId":"${blackJSON['appId']}","isMiniProgram":false}`
+    encodeBody = encodeURIComponent(reqBody)
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://market.chuxingyouhui.com/promo-bargain-api/garden/api/v1_0/userFruitDetail',
+            headers: {
+                'Host' : 'market.chuxingyouhui.com',
+                'request-body' : encodeBody,
+                'Accept' : 'application/json, text/plain, */*',
+                'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'token' : blackJSON['token'],
+                'Content-Type' : 'application/json;charset=utf-8',
+                'Origin' : 'https://m.black-unique.com',
+                'User-Agent' : blackJSON['User-Agent'],
+                'black-token' : blackJSON['black-token'],
+                'Connection' : 'keep-alive',
+            },
+            body: reqBody,
+        };
+        $.post(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            console.log(`你现在种的水果是 ${result.data.fruitName} ${result.data.specification}，${result.data.progressWord}`)
+                            console.log(`今天已浇水${result.data.wateredTimes}次，剩余水滴数量：${result.data.remainAmount}`)
+                            fruitId = result.data.fruitId
+                            userFruitId = result.data.userFruitId
+                            activityId = result.data.activityId
+                            if(result.data.canReceiveStatus == 1 && result.data.canReceiveAmount > 0) {
+                                await receiveWaterDrop('TOMORROW_REWARD','null','每日水滴')
+                            }
+                            if(result.data.gardenStageRewardResp && result.data.gardenStageRewardResp.status == 1) {
+                                await fruitStageReward()
+                            }
+                            if(result.data.remainAmount >= 10) {
+                                waterCount = 0
+                                console.log(`开始浇水，请等候......`)
+                                await wateringFruit()
+                                console.log(`浇水结束，本次共浇水${waterCount}次`)
+                            }
+                        } else {
+                            console.log(`查询果园状态失败：${result.msg}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//果园水果进度奖励
+async function fruitStageReward() {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime()/1000)
+    reqBody = `{"userFruitId":"${userFruitId}","appId":"${blackJSON['appId']}"}`
+    encodeBody = encodeURIComponent(reqBody)
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://market.chuxingyouhui.com/promo-bargain-api/garden/api/v1_0/receiveStageReward',
+            headers: {
+                'Host' : 'market.chuxingyouhui.com',
+                'request-body' : encodeBody,
+                'Accept' : 'application/json, text/plain, */*',
+                'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'token' : blackJSON['token'],
+                'Content-Type' : 'application/json;charset=utf-8',
+                'Origin' : 'https://m.black-unique.com',
+                'User-Agent' : blackJSON['User-Agent'],
+                'black-token' : blackJSON['black-token'],
+                'Connection' : 'keep-alive',
+            },
+            body: reqBody,
+        };
+        $.post(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            console.log(`领取水果进度奖励：${result.data.rewardNum}水滴`)
+                        } else {
+                            console.log(`领取水果进度奖励失败：${result.msg}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//果园浇水
+async function wateringFruit() {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime()/1000)
+    reqBody = `{"userFruitId":"${userFruitId}"}`
+    encodeBody = encodeURIComponent(reqBody)
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://market.chuxingyouhui.com/promo-bargain-api/garden/api/v1_0/watering',
+            headers: {
+                'Host' : 'market.chuxingyouhui.com',
+                'request-body' : encodeBody,
+                'Accept' : 'application/json, text/plain, */*',
+                'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'token' : blackJSON['token'],
+                'Content-Type' : 'application/json;charset=utf-8',
+                'Origin' : 'https://m.black-unique.com',
+                'User-Agent' : blackJSON['User-Agent'],
+                'black-token' : blackJSON['black-token'],
+                'Connection' : 'keep-alive',
+            },
+            body: reqBody,
+        };
+        $.post(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            if(result.data.level && !result.data.remindType) {
+                                if(result.data.upgrade == true) {
+                                    console.log(`果树升级到 ${result.data.level} 获得：${result.data.upgradeReward}水滴`)
+                                }
+                                waterCount++
+                                await $.wait(500)
+                                await wateringFruit()
+                            }
+                        } else {
+                            console.log(`浇水失败：${result.msg}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//果园水滴任务
+async function waterTaskList() {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime()/1000)
+    reqBody = `{"activityId":"${activityId}","userFruitId":"${userFruitId}","clientType":1}`
+    encodeBody = encodeURIComponent(reqBody)
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://market.chuxingyouhui.com/promo-bargain-api/garden/api/v1_0/userTaskList',
+            headers: {
+                'Host' : 'market.chuxingyouhui.com',
+                'request-body' : encodeBody,
+                'Accept' : 'application/json, text/plain, */*',
+                'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'token' : blackJSON['token'],
+                'Content-Type' : 'application/json;charset=utf-8',
+                'Origin' : 'https://m.black-unique.com',
+                'User-Agent' : blackJSON['User-Agent'],
+                'black-token' : blackJSON['black-token'],
+                'Connection' : 'keep-alive',
+            },
+            body: reqBody,
+        };
+        $.post(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            if(result.data && result.data.taskList && Array.isArray(result.data.taskList)) {
+                                for(let i=0; i<result.data.taskList.length; i++) {
+                                    let taskItem = result.data.taskList[i]
+                                    if(taskItem.taskType.indexOf('CLICK_DO_TASK') > -1 || 
+                                       taskItem.taskType.indexOf('WATCH_VIDEO') > -1   || 
+                                       taskItem.taskType.indexOf('APP_LOGIN') > -1) {
+                                        if(taskItem.status == 0) {
+                                            await doWaterTask(taskItem.taskType,taskItem.taskId,taskItem.title)
+                                        } else if(taskItem.status == 1) {
+                                            await receiveWaterDrop(taskItem.taskType,taskItem.userTaskId,taskItem.title)
+                                        }
+                                    } else if(taskItem.taskType.indexOf('EVERY_DAY_WATERING_REWARD') > -1 ||
+                                              taskItem.taskType.indexOf('OPEN_CHEST') > -1) {
+                                        if(taskItem.status == 1) {
+                                            await receiveWaterDrop(taskItem.taskType,taskItem.userTaskId,taskItem.title)
+                                        }
+                                    } else {
+                                        if(taskItem.status == 0) {
+                                            await receiveWaterDrop(taskItem.taskType,taskItem.userTaskId,taskItem.title)
+                                        }
+                                    } 
+                                }
+                            }
+                        } else {
+                            console.log(`获取果园水滴任务失败：${result.msg}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//果园-完成水滴任务
+async function doWaterTask(taskType,taskId,taskTitle) {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime())
+    reqBody = `{"userFruitId":"${userFruitId}","taskType":"${taskType}","taskId":"${taskId}"}`
+    encodeBody = encodeURIComponent(reqBody)
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://market.chuxingyouhui.com/promo-bargain-api/garden/api/v1_0/doTask',
+            headers: {
+                'Host' : 'market.chuxingyouhui.com',
+                'request-body' : encodeBody,
+                'Accept' : 'application/json, text/plain, */*',
+                'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'token' : blackJSON['token'],
+                'Content-Type' : 'application/json;charset=utf-8',
+                'Origin' : 'https://m.black-unique.com',
+                'User-Agent' : blackJSON['User-Agent'],
+                'black-token' : blackJSON['black-token'],
+                'Referer' : 'https://m.black-unique.com/',
+                'Connection' : 'keep-alive',
+            },
+            body: reqBody
+        };
+        $.post(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            console.log(`完成水滴任务【${taskTitle}】成功`)
+                        } else {
+                            console.log(`完成水滴任务【${taskTitle}】失败：${result.msg}`)
+                        }
+                        await $.wait(1000)
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//果园-领取水滴
+async function receiveWaterDrop(taskType,userTaskId,taskTitle) {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime())
+    reqBody = `{"userFruitId":"${userFruitId}","taskType":"${taskType}","userTaskId":${userTaskId}}`
+    encodeBody = encodeURIComponent(reqBody)
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://market.chuxingyouhui.com/promo-bargain-api/garden/api/v1_0/receiveWaterDrop',
+            headers: {
+                'Host' : 'market.chuxingyouhui.com',
+                'request-body' : encodeBody,
+                'Accept' : 'application/json, text/plain, */*',
+                'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'token' : blackJSON['token'],
+                'Content-Type' : 'application/json;charset=utf-8',
+                'Origin' : 'https://m.black-unique.com',
+                'User-Agent' : blackJSON['User-Agent'],
+                'black-token' : blackJSON['black-token'],
+                'Referer' : 'https://m.black-unique.com/',
+                'Connection' : 'keep-alive',
+            },
+            body: reqBody
+        };
+        $.post(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            console.log(`领取水滴任务【${taskTitle}】奖励：${result.data.reward}水滴`)
+                        } else {
+                            console.log(`领取水滴任务【${taskTitle}】奖励失败：${result.msg}`)
+                        }
+                        await $.wait(1000)
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//果园肥料任务
+async function nutrientTaskList() {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime()/1000)
+    reqBody = `{"activityId":"${activityId}","userFruitId":"${userFruitId}"}`
+    encodeBody = encodeURIComponent(reqBody)
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://market.chuxingyouhui.com/promo-bargain-api/garden/api/v1_0/getUserNutrientTaskList',
+            headers: {
+                'Host' : 'market.chuxingyouhui.com',
+                'request-body' : encodeBody,
+                'Accept' : 'application/json, text/plain, */*',
+                'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'token' : blackJSON['token'],
+                'Content-Type' : 'application/json;charset=utf-8',
+                'Origin' : 'https://m.black-unique.com',
+                'User-Agent' : blackJSON['User-Agent'],
+                'black-token' : blackJSON['black-token'],
+                'Connection' : 'keep-alive',
+            },
+            body: reqBody,
+        };
+        $.post(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            if(result.data && result.data.gardenFertilizerTaskDtoList && Array.isArray(result.data.gardenFertilizerTaskDtoList)) {
+                                for(let i=0; i<result.data.gardenFertilizerTaskDtoList.length; i++) {
+                                    let taskItem = result.data.gardenFertilizerTaskDtoList[i]
+                                    if(taskItem.taskType.indexOf('ORDER_FOR_FERTILIZER') == -1 && taskItem.status != 2) {
+                                        await doNutrientTask(taskItem.taskType,taskItem.taskId,taskItem.title)
+                                    }
+                                }
+                            }
+                        } else {
+                            console.log(`获取果园肥料任务失败：${result.msg}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//果园-完成肥料任务
+async function doNutrientTask(taskType,taskId,taskTitle) {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime())
+    reqBody = `{"taskId":"${taskId}","userFruitId":"${userFruitId}","taskType":"${taskType}","source":2}`
+    encodeBody = encodeURIComponent(reqBody)
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://market.chuxingyouhui.com/promo-bargain-api/garden/api/v1_0/doTaskForNutrient',
+            headers: {
+                'Host' : 'market.chuxingyouhui.com',
+                'request-body' : encodeBody,
+                'Accept' : 'application/json, text/plain, */*',
+                'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'token' : blackJSON['token'],
+                'Content-Type' : 'application/json;charset=utf-8',
+                'Origin' : 'https://m.black-unique.com',
+                'User-Agent' : blackJSON['User-Agent'],
+                'black-token' : blackJSON['black-token'],
+                'Referer' : 'https://m.black-unique.com/',
+                'Connection' : 'keep-alive',
+            },
+            body: reqBody
+        };
+        $.post(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            console.log(`完成肥料任务【${taskTitle}】成功`)
+                        } else {
+                            console.log(`完成肥料任务【${taskTitle}】失败：${result.msg}`)
+                        }
+                        await $.wait(1000)
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//果园肥料状态
+async function userFertilizerDetail(taskType,taskId,taskTitle) {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime())
+    reqBody = `{"activityId":"${activityId}","userFruitId":"${userFruitId}"}`
+    encodeBody = encodeURIComponent(reqBody)
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://market.chuxingyouhui.com/promo-bargain-api/garden/api/v1_0/getUserFertilizerTool',
+            headers: {
+                'Host' : 'market.chuxingyouhui.com',
+                'request-body' : encodeBody,
+                'Accept' : 'application/json, text/plain, */*',
+                'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'token' : blackJSON['token'],
+                'Content-Type' : 'application/json;charset=utf-8',
+                'Origin' : 'https://m.black-unique.com',
+                'User-Agent' : blackJSON['User-Agent'],
+                'black-token' : blackJSON['black-token'],
+                'Referer' : 'https://m.black-unique.com/',
+                'Connection' : 'keep-alive',
+            },
+            body: reqBody
+        };
+        $.post(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            fertilizerCount = 0
+                            if(result.data.userSmallFertilizerTool.remainNum > 0 || result.data.userFertilizerTool.remainNum > 0) {
+                                for(let i=0; i<result.data.userSmallFertilizerTool.remainNum; i++) {
+                                    await useFertilizer(result.data.userSmallFertilizerTool.userToolIds)
+                                }
+                                for(let i=0; i<result.data.userFertilizerTool.remainNum; i++) {
+                                    await useFertilizer(result.data.userFertilizerTool.userToolIds)
+                                }
+                                console.log(`施肥结束，本次共施肥${waterCount}次`)
+                            }
+                        } else {
+                            console.log(`获取果园肥料状态失败：${result.msg}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//果园施肥
+async function useFertilizer(userToolId) {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime())
+    reqBody = `{"userFruitId":"${userFruitId}","userToolId":"${userToolId}"}`
+    encodeBody = encodeURIComponent(reqBody)
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://market.chuxingyouhui.com/promo-bargain-api/garden/api/v1_0/useFertilizer',
+            headers: {
+                'Host' : 'market.chuxingyouhui.com',
+                'request-body' : encodeBody,
+                'Accept' : 'application/json, text/plain, */*',
+                'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'token' : blackJSON['token'],
+                'Content-Type' : 'application/json;charset=utf-8',
+                'Origin' : 'https://m.black-unique.com',
+                'User-Agent' : blackJSON['User-Agent'],
+                'black-token' : blackJSON['black-token'],
+                'Referer' : 'https://m.black-unique.com/',
+                'Connection' : 'keep-alive',
+            },
+            body: reqBody
+        };
+        $.post(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            //施肥成功
+                        } else {
+                            console.log(`施肥失败：${result.msg}`)
+                        }
+                        await $.wait(500)
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//果园-摇树得优惠券
+async function getTreeCoupon() {
+    console.log(`\n开始摇树${clickTreeTimes}次得优惠券`)
+    for(let i=0; i<clickTreeTimes; i++) {
+        await clickTree()
+    }
+}
+
+//果园-点击树
+async function clickTree() {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime())
+    reqBody = `{"userFruitId":"${userFruitId}","appId":"${blackJSON['appId']}"}`
+    encodeBody = encodeURIComponent(reqBody)
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://market.chuxingyouhui.com/promo-bargain-api/garden/api/v1_0/clickTree',
+            headers: {
+                'Host' : 'market.chuxingyouhui.com',
+                'request-body' : encodeBody,
+                'Accept' : 'application/json, text/plain, */*',
+                'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'token' : blackJSON['token'],
+                'Content-Type' : 'application/json;charset=utf-8',
+                'Origin' : 'https://m.black-unique.com',
+                'User-Agent' : blackJSON['User-Agent'],
+                'black-token' : blackJSON['black-token'],
+                'Referer' : 'https://m.black-unique.com/',
+                'Connection' : 'keep-alive',
+            },
+            body: reqBody
+        };
+        $.post(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            await $.wait(1000)
+                            if(result.data.hasReward == true) {
+                                await receiveReward(result.data.rewardId,result.data.rewardName,result.data.rewardInfo)
+                            }
+                        } else {
+                            console.log(`果园点击树失败：${result.msg}`)
+                        }
+                        await $.wait(500)
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//果园-获得树干奖励
+async function receiveReward(rewardId,rewardName,rewardInfo) {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime())
+    reqBody = `{"rewardId":"${rewardId}","userFruitId":"${userFruitId}","appId":"${blackJSON['appId']}"}`
+    encodeBody = encodeURIComponent(reqBody)
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://market.chuxingyouhui.com/promo-bargain-api/garden/api/v1_0/receiveReward',
+            headers: {
+                'Host' : 'market.chuxingyouhui.com',
+                'request-body' : encodeBody,
+                'Accept' : 'application/json, text/plain, */*',
+                'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'token' : blackJSON['token'],
+                'Content-Type' : 'application/json;charset=utf-8',
+                'Origin' : 'https://m.black-unique.com',
+                'User-Agent' : blackJSON['User-Agent'],
+                'black-token' : blackJSON['black-token'],
+                'Referer' : 'https://m.black-unique.com/',
+                'Connection' : 'keep-alive',
+            },
+            body: reqBody
+        };
+        $.post(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            console.log(`获得优惠券：${rewardName} -- ${rewardInfo}`)
+                        } else {
+                            console.log(`获取优惠券失败：${result.msg}`)
+                        }
+                        await $.wait(1000)
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//查询账户信息
+async function userInfo() {
+    console.log(`\n========= 账户信息 =========`)
+    notifyStr += `========= 账户信息 =========\n`
+    await userRebateInfo()
+    await userTopInfo()
+}
+
+//查询现金余额
+async function userRebateInfo() {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime())
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://pyp-api.chuxingyouhui.com/api/app/userCenter/v1/info',
+            headers: {
+                'Host' : 'pyp-api.chuxingyouhui.com',
+                'Accept' : '*/*',
+                'phpUserId' : blackJSON['phpUserId'],
+                'device-value' : blackJSON['device-value'],
+                'device-type' : blackJSON['device-type'],
+                'Accept-Language' : 'zh-Hans-CN;q=1',
+                'token' : blackJSON['token'],
+                'User-Agent' : blackJSON['User-Agent'],
+                'black-token' : blackJSON['black-token'],
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'Connection' : 'keep-alive',
+            },
+        };
+        $.get(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            console.log(`【现金余额】：${result.data.currencyBlanceResp.commission}`)
+                            notifyStr += `【现金余额】：${result.data.currencyBlanceResp.commission}\n`
+                        } else {
+                            console.log(`查询现金余额失败：${result.msg}`)
+                            notifyStr += `查询现金余额失败：${result.msg}\n`
+                        }
+                        await $.wait(200)
+                    }
+                }
+            } catch (e) {
+                $.logErr(e, resp);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+//查询勋章余额
+async function userTopInfo() {
+    let caller = printCaller()
+    //rndtime = Math.round(new Date().getTime())
+    return new Promise((resolve) => {
+        let url = {
+            url: 'https://market.chuxingyouhui.com/promo-bargain-api/activity/mqq/api/indexTopInfo?appId='+blackJSON['appId'],
+            headers: {
+                'Host' : 'market.chuxingyouhui.com',
+                'Origin' : 'https://m.black-unique.com',
+                'Accept-Encoding' : 'gzip, deflate, br',
+                'Connection' : 'keep-alive',
+                'black-token' : blackJSON['black-token'],
+                'Accept' : 'application/json, text/plain, */*',
+                'User-Agent' : blackJSON['User-Agent'],
+                'Referer' : 'https://m.black-unique.com/',
+                'token' : blackJSON['token'],
+                'Accept-Language' : 'zh-CN,zh-Hans;q=0.9',
+            },
+        };
+        $.get(url, async (err, resp, data) => {
+            try {
+                if (err) {
+                    console.log("Fucntion " + caller + ": API请求失败");
+                    console.log(JSON.stringify(err));
+                    $.logErr(err);
+                } else {
+                    if (safeGet(data)) {
+                        let result = JSON.parse(data);
+                        if(logDebug) console.log(result);
+                        if(result.code == 200) {
+                            console.log(`【勋章余额】：${result.data.score}`)
+                            notifyStr += `【勋章余额】：${result.data.score}\n`
+                        } else {
+                            console.log(`查询勋章余额失败：${result.msg}`)
+                            notifyStr += `查询勋章余额失败：${result.msg}\n`
+                        }
+                        await $.wait(200)
                     }
                 }
             } catch (e) {
