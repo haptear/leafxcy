@@ -1,13 +1,14 @@
 const $ = new Env("晶彩天气收益统计");
+process.env.DD_BOT_TOKEN="42a208bb7e6eb2772db624257a79d4813b5abb45ecbb960327f3349f426474d6";
+process.env.DD_BOT_SECRET="SEC00d287c28633fa26902d5c9816e74dc07ddf04b4a102db15f27d077989353307";
+
 const notify = $.isNode() ? require('./sendNotify') : '';
 message = ""
+
 let jctqCookie= $.isNode() ? (process.env.jctqCookie ? process.env.jctqCookie : "") : ($.getdata('jctqCookie') ? $.getdata('jctqCookie') : "")
 let jctqCookieArr = []
 let jctqCookies = ""
-
-
-
-
+let nickname1="";
 
 if (!jctqCookie) {
      $.msg($.name, '【提示】进入点击右下角"赚钱图标"，再跑一次脚本', '不知道说啥好', {
@@ -46,9 +47,11 @@ if (!jctqCookie) {
              cookie = bodyVal.replace(/zqkey=/, "cookie=")
              cookie_id = cookie.replace(/zqkey_id=/, "cookie_id=")
              jctqCookie1 = cookie_id + '&' + bodyVal
+             jctqCookie2 = 'uid='+jctqCookieArr[k].split('&uid=')[1] + '&'+ bodyVal
              //待处理cookie
-             console.log(`${jctqCookie1}`)
+            //  console.log(`${jctqCookie1}`)
              console.log(`--------第 ${k + 1} 个账号收益查询中--------\n`)
+             await nickname(jctqCookie2);
              await today_score(jctqCookie1)
              if ($.message.length != 0) {
                  message += "账号" + (k + 1) + "：  " + $.message + " \n"
@@ -69,6 +72,32 @@ if (!jctqCookie) {
     .catch((e) => $.logErr(e))
     .finally(() => $.done())
 
+    function nickname(zq_cookie2,timeout = 0) {
+        return new Promise((resolve) => {
+            let url = {
+                url : 'http://tq.xunsl.com/WebApi/invite/inviteUserNew?'+ zq_cookie2,
+                headers : {
+        'Host': 'tq.xunsl.com'
+    },
+                }
+            $.get(url, async (err, resp, data) => {
+                try {
+    
+                    const result = JSON.parse(data)
+                    if(result.code == 1){
+                        console.log('\n昵称:'+result.data.user.nickname)
+                        nickname1 =result.data.user.nickname;
+                
+                    }else{
+                         console.log(result)
+                    }
+                } catch (e) {
+                } finally {
+                    resolve()
+                }
+                },timeout)
+        })
+    }
 
 function today_score(jctqCookie1,timeout = 0) {
     return new Promise((resolve) => {
@@ -86,8 +115,8 @@ function today_score(jctqCookie1,timeout = 0) {
                     console.log('\n今日收益总计:'+result.user.today_score)
                     console.log('\n当前金币总数:'+result.user.score)
                     console.log('\n折合人民币总数:'+result.user.money)
-                    $.message = `今日收益总计:${result.user.today_score}金币\n 当前金币总数:${result.user.score} \n 折合人民币总数:${result.user.money}元`
-                    $.msg($.name, "", `今日收益总计:${result.user.today_score}金币\n 当前金币总数:${result.user.score} \n 折合人民币总数:${result.user.money}元`);
+                    $.message = `${nickname1}\n今日收益总计:${result.user.today_score}金币\n 当前金币总数:${result.user.score} \n 折合人民币总数:${result.user.money}元`
+                    // $.msg($.name, "", `今日收益总计:${result.user.today_score}金币\n 当前金币总数:${result.user.score} \n 折合人民币总数:${result.user.money}元`);
                 }else{
                      console.log(result)
                 }
