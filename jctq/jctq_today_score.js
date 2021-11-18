@@ -1,6 +1,4 @@
 const $ = new Env("晶彩天气收益统计");
-process.env.DD_BOT_TOKEN="42a208bb7e6eb2772db624257a79d4813b5abb45ecbb960327f3349f426474d6";
-process.env.DD_BOT_SECRET="SEC00d287c28633fa26902d5c9816e74dc07ddf04b4a102db15f27d077989353307";
 
 const notify = $.isNode() ? require('./sendNotify') : '';
 message = ""
